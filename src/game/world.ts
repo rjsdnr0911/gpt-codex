@@ -1,4 +1,4 @@
-import { createNoise2D, type NoiseFunction2D } from "simplex-noise";
+import { createNoise2D, createNoise3D, type NoiseFunction2D, type NoiseFunction3D } from "simplex-noise";
 import * as THREE from "three";
 import {
   BLOCKS,
@@ -15,6 +15,8 @@ import {
 import { clamp, chunkCoord, hash3, localCoord, mulberry32, seedToInt } from "./math";
 import { type SavedBlock } from "./saveSystem";
 import { pushTileUvs, type VoxelMaterials } from "./textureAtlas";
+
+export const WORLDGEN_VERSION = 3;
 
 interface FaceDefinition {
   name: FaceName;
@@ -108,21 +110,27 @@ export class World {
   readonly group = new THREE.Group();
   readonly seed: string;
   readonly seedInt: number;
+  readonly worldgenVersion: number;
 
   private readonly chunks = new Map<string, Chunk>();
   private readonly modified = new Map<string, BlockType>();
   private readonly continentalNoise: NoiseFunction2D;
   private readonly hillNoise: NoiseFunction2D;
   private readonly detailNoise: NoiseFunction2D;
+  private readonly caveNoise: NoiseFunction3D;
+  private readonly caveRoomNoise: NoiseFunction3D;
   private readonly materials: VoxelMaterials;
 
-  constructor(seed: string, materials: VoxelMaterials) {
+  constructor(seed: string, materials: VoxelMaterials, worldgenVersion = WORLDGEN_VERSION) {
     this.seed = seed;
     this.seedInt = seedToInt(seed);
+    this.worldgenVersion = worldgenVersion;
     this.materials = materials;
     this.continentalNoise = createNoise2D(mulberry32(this.seedInt ^ 0xa53a9e1d));
     this.hillNoise = createNoise2D(mulberry32(this.seedInt ^ 0x51f15e2d));
     this.detailNoise = createNoise2D(mulberry32(this.seedInt ^ 0x8c3c6f43));
+    this.caveNoise = createNoise3D(mulberry32(this.seedInt ^ 0x2f63d4a1));
+    this.caveRoomNoise = createNoise3D(mulberry32(this.seedInt ^ 0x9a1c77e3));
     this.group.name = "Voxel world";
   }
 
@@ -281,11 +289,73 @@ export class World {
       return height <= WATER_LEVEL + 1 ? BlockType.Sand : BlockType.Dirt;
     }
 
-    if (y < height - 8 && y < 45 && hash3(this.seedInt, x, y, z) < 0.018) {
-      return BlockType.Ore;
+    if (this.worldgenVersion < WORLDGEN_VERSION) {
+      if (y < height - 8 && y < 45 && hash3(this.seedInt, x, y, z) < 0.018) {
+        return BlockType.Ore;
+      }
+
+      return BlockType.Stone;
     }
 
-    return BlockType.Stone;
+    if (this.isCave(x, y, z, height)) {
+      return y < WATER_LEVEL - 10 && hash3(this.seedInt ^ 0x3a0a, x, y, z) < 0.075 ? BlockType.Water : BlockType.Air;
+    }
+
+    return this.oreAt(x, y, z, height) ?? BlockType.Stone;
+  }
+
+  private isCave(x: number, y: number, z: number, height: number): boolean {
+    if (y < 5 || y > height - 5) {
+      return false;
+    }
+
+    const spawnProtection = Math.max(0, 1 - Math.hypot(x, z) / 20);
+    const depth = clamp((height - y) / 42, 0, 1);
+    const tunnel = Math.abs(this.caveNoise(x * 0.055, y * 0.078, z * 0.055));
+    const room = this.caveRoomNoise(x * 0.027, y * 0.038, z * 0.027);
+    const tunnelThreshold = 0.055 + depth * 0.055 - spawnProtection * 0.04;
+    const roomThreshold = 0.73 + spawnProtection * 0.08;
+    return tunnel < tunnelThreshold || room > roomThreshold;
+  }
+
+  private oreAt(x: number, y: number, z: number, height: number): BlockType | null {
+    const specs: Array<{
+      block: BlockType;
+      min: number;
+      max: number;
+      peaks: number[];
+      chance: number;
+      salt: number;
+      mountainOnly?: boolean;
+    }> = [
+      { block: BlockType.DiamondOre, min: 2, max: 16, peaks: [5], chance: 0.018, salt: 0xd1a },
+      { block: BlockType.RedstoneOre, min: 4, max: 18, peaks: [7], chance: 0.028, salt: 0xeda },
+      { block: BlockType.GoldOre, min: 4, max: 24, peaks: [12], chance: 0.018, salt: 0x601d },
+      { block: BlockType.LapisOre, min: 8, max: 30, peaks: [18], chance: 0.018, salt: 0x1a915 },
+      { block: BlockType.EmeraldOre, min: 28, max: 60, peaks: [44], chance: 0.012, salt: 0xe2e, mountainOnly: true },
+      { block: BlockType.IronOre, min: 8, max: 54, peaks: [16, 44], chance: 0.055, salt: 0x1f0a },
+      { block: BlockType.CopperOre, min: 16, max: 44, peaks: [32], chance: 0.045, salt: 0xc099 },
+      { block: BlockType.CoalOre, min: 20, max: 60, peaks: [46], chance: 0.075, salt: 0xc0a1 }
+    ];
+
+    for (const spec of specs) {
+      if (y < spec.min || y > spec.max) {
+        continue;
+      }
+
+      if (spec.mountainOnly && height < WATER_LEVEL + 24) {
+        continue;
+      }
+
+      const vertical = Math.max(...spec.peaks.map((peak) => 1 - Math.abs(y - peak) / Math.max(1, spec.max - spec.min)));
+      const vein = hash3(this.seedInt ^ spec.salt, Math.floor(x / 2), Math.floor(y / 2), Math.floor(z / 2));
+      const fleck = hash3(this.seedInt ^ (spec.salt << 1), x, y, z);
+      if (vein < spec.chance * vertical && fleck < 0.74) {
+        return spec.block;
+      }
+    }
+
+    return null;
   }
 
   shouldTree(x: number, z: number): boolean {
@@ -536,7 +606,125 @@ class Chunk {
     }
 
     this.placeTrees();
+    this.placeStructures();
     this.applyModifiedBlocks();
+  }
+
+  private placeStructures(): void {
+    if (this.world.worldgenVersion < WORLDGEN_VERSION) {
+      return;
+    }
+
+    const startX = this.cx * CHUNK_SIZE;
+    const startZ = this.cz * CHUNK_SIZE;
+    const centerX = startX + 4 + Math.floor(hash3(this.world.seedInt ^ 0x5cab1, this.cx, 20, this.cz) * 8);
+    const centerZ = startZ + 4 + Math.floor(hash3(this.world.seedInt ^ 0x5cab2, this.cx, 21, this.cz) * 8);
+    const surfaceRoll = hash3(this.world.seedInt ^ 0x7811, this.cx, 0, this.cz);
+    const undergroundRoll = hash3(this.world.seedInt ^ 0x91d6, this.cx, 7, this.cz);
+
+    if (surfaceRoll < 0.018) {
+      this.placeCabin(centerX, centerZ);
+    } else if (surfaceRoll < 0.04) {
+      this.placeRuinedCamp(centerX, centerZ);
+    }
+
+    if (undergroundRoll < 0.035) {
+      this.placeMineshaft(centerX, 10 + Math.floor(hash3(this.world.seedInt ^ 0xa11e, this.cx, 4, this.cz) * 22), centerZ);
+    } else if (undergroundRoll < 0.047) {
+      this.placeDungeon(centerX, 8 + Math.floor(hash3(this.world.seedInt ^ 0xd06e, this.cx, 5, this.cz) * 18), centerZ);
+    }
+  }
+
+  private placeCabin(x: number, z: number): void {
+    const baseY = this.world.terrainHeight(x, z) + 1;
+    if (baseY <= WATER_LEVEL + 1 || baseY >= WORLD_HEIGHT - 12) {
+      return;
+    }
+
+    for (let dz = -3; dz <= 3; dz += 1) {
+      for (let dx = -3; dx <= 3; dx += 1) {
+        this.placeGlobal(x + dx, baseY - 1, z + dz, BlockType.Planks, true);
+        for (let y = baseY; y <= baseY + 3; y += 1) {
+          this.placeGlobal(x + dx, y, z + dz, BlockType.Air, true);
+        }
+
+        const edge = Math.abs(dx) === 3 || Math.abs(dz) === 3;
+        const corner = Math.abs(dx) === 3 && Math.abs(dz) === 3;
+        if (edge && !(dz === -3 && dx >= -1 && dx <= 1 && baseY < WORLD_HEIGHT - 4)) {
+          this.placeGlobal(x + dx, baseY, z + dz, corner ? BlockType.Log : BlockType.Planks, true);
+          this.placeGlobal(x + dx, baseY + 1, z + dz, corner ? BlockType.Log : BlockType.Planks, true);
+        }
+
+        if (edge || Math.abs(dx) <= 2 || Math.abs(dz) <= 2) {
+          this.placeGlobal(x + dx, baseY + 3, z + dz, BlockType.Planks, true);
+        }
+      }
+    }
+
+    this.placeGlobal(x - 1, baseY, z - 3, BlockType.Air, true);
+    this.placeGlobal(x, baseY, z - 3, BlockType.Air, true);
+    this.placeGlobal(x + 2, baseY, z + 1, BlockType.CraftingTable, true);
+    this.placeGlobal(x - 2, baseY, z + 1, BlockType.Chest, true);
+    this.placeGlobal(x, baseY, z + 2, BlockType.Furnace, true);
+    this.placeGlobal(x + 1, baseY + 1, z - 2, BlockType.Torch, true);
+  }
+
+  private placeRuinedCamp(x: number, z: number): void {
+    const baseY = this.world.terrainHeight(x, z) + 1;
+    if (baseY <= WATER_LEVEL + 1 || baseY >= WORLD_HEIGHT - 8) {
+      return;
+    }
+
+    for (let dz = -2; dz <= 2; dz += 1) {
+      for (let dx = -2; dx <= 2; dx += 1) {
+        if (Math.abs(dx) === 2 || Math.abs(dz) === 2 || hash3(this.world.seedInt, x + dx, baseY, z + dz) < 0.3) {
+          this.placeGlobal(x + dx, baseY - 1, z + dz, BlockType.Planks, true);
+        }
+      }
+    }
+
+    this.placeGlobal(x - 2, baseY, z - 2, BlockType.Log, true);
+    this.placeGlobal(x + 2, baseY, z - 2, BlockType.Log, true);
+    this.placeGlobal(x - 1, baseY, z + 1, BlockType.Chest, true);
+    this.placeGlobal(x + 1, baseY, z, BlockType.Furnace, true);
+    this.placeGlobal(x, baseY, z, BlockType.Torch, true);
+  }
+
+  private placeMineshaft(x: number, y: number, z: number): void {
+    for (let offset = -8; offset <= 8; offset += 1) {
+      for (let dy = 0; dy <= 2; dy += 1) {
+        for (let dz = -1; dz <= 1; dz += 1) {
+          this.placeGlobal(x + offset, y + dy, z + dz, BlockType.Air, true);
+        }
+      }
+
+      if (offset % 4 === 0) {
+        this.placeGlobal(x + offset, y, z - 1, BlockType.Log, true);
+        this.placeGlobal(x + offset, y + 1, z - 1, BlockType.Log, true);
+        this.placeGlobal(x + offset, y, z + 1, BlockType.Log, true);
+        this.placeGlobal(x + offset, y + 1, z + 1, BlockType.Log, true);
+        this.placeGlobal(x + offset, y + 2, z, BlockType.Planks, true);
+      }
+    }
+
+    this.placeGlobal(x - 4, y, z, BlockType.Chest, true);
+    this.placeGlobal(x + 4, y + 1, z - 1, BlockType.Torch, true);
+  }
+
+  private placeDungeon(x: number, y: number, z: number): void {
+    for (let dz = -4; dz <= 4; dz += 1) {
+      for (let dx = -4; dx <= 4; dx += 1) {
+        for (let dy = -1; dy <= 3; dy += 1) {
+          const wall = Math.abs(dx) === 4 || Math.abs(dz) === 4 || dy === -1 || dy === 3;
+          this.placeGlobal(x + dx, y + dy, z + dz, wall ? BlockType.Brick : BlockType.Air, true);
+        }
+      }
+    }
+
+    this.placeGlobal(x, y, z, BlockType.Chest, true);
+    this.placeGlobal(x - 2, y, z + 2, BlockType.GoldOre, true);
+    this.placeGlobal(x + 2, y, z - 2, BlockType.RedstoneOre, true);
+    this.placeGlobal(x, y + 1, z - 3, BlockType.Torch, true);
   }
 
   private placeTrees(): void {

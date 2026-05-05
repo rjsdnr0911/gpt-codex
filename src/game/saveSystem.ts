@@ -29,6 +29,7 @@ export interface SavedGameV1 {
 
 export interface WorldSaveV2 {
   version: 2;
+  worldgenVersion?: number;
   id: string;
   name: string;
   seed: string;

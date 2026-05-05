@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { addStack, createInventoryState } from "./inventory";
-import { canCraft, craft, RECIPES } from "./recipes";
+import { consumeRecipeGrid, canCraft, craft, matchRecipeFromGrid, RECIPES } from "./recipes";
 
 describe("recipes", () => {
   it("crafts planks from one log in a 2x2 inventory grid", () => {
@@ -23,5 +23,25 @@ describe("recipes", () => {
     expect(recipe).toBeDefined();
     expect(canCraft(recipe!, inventory, 2)).toBe(false);
     expect(canCraft(recipe!, inventory, 3)).toBe(true);
+  });
+
+  it("matches and consumes a manual 3x3 pickaxe grid", () => {
+    const grid = [
+      { item: "planks" as const, count: 1 },
+      { item: "planks" as const, count: 1 },
+      { item: "planks" as const, count: 1 },
+      null,
+      { item: "stick" as const, count: 1 },
+      null,
+      null,
+      { item: "stick" as const, count: 1 },
+      null
+    ];
+
+    const recipe = matchRecipeFromGrid(grid, 3);
+
+    expect(recipe?.id).toBe("wooden_pickaxe");
+    consumeRecipeGrid(grid, recipe!, 3);
+    expect(grid.every((slot) => slot === null)).toBe(true);
   });
 });

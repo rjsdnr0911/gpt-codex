@@ -357,6 +357,7 @@ button {
 
 .hud[data-mode="inventory"] .reticle,
 .hud[data-mode="craftingTable"] .reticle,
+.hud[data-mode="furnace"] .reticle,
 .hud[data-mode="paused"] .reticle,
 .hud[data-mode="gameOver"] .reticle {
   display: none;
@@ -477,7 +478,7 @@ button {
 
 .world-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   gap: 8px;
 }
 
@@ -651,7 +652,9 @@ button {
 
 .survival-hotbar .slot,
 .inventory-slot,
-.craft-cell {
+.craft-cell,
+.craft-slot,
+.craft-result-slot {
   border-radius: 0;
   border: 2px solid #111;
   background: #3b3b3b;
@@ -937,9 +940,16 @@ button {
   text-shadow: 3px 3px 0 #000;
 }
 
-.craft-grid {
+.crafting-area {
   grid-area: craft;
   justify-self: center;
+  display: grid;
+  grid-template-columns: auto 34px 42px;
+  gap: 10px;
+  align-items: center;
+}
+
+.craft-grid {
   display: grid;
   gap: 4px;
 }
@@ -953,7 +963,9 @@ button {
 }
 
 .craft-cell,
-.inventory-slot {
+.inventory-slot,
+.craft-slot,
+.craft-result-slot {
   position: relative;
   width: 42px;
   height: 42px;
@@ -962,12 +974,27 @@ button {
   cursor: grab;
 }
 
-.inventory-slot:active {
+.inventory-slot:active,
+.craft-slot:active,
+.craft-result-slot:active {
   cursor: grabbing;
 }
 
-.inventory-slot.dragging {
+.inventory-slot.dragging,
+.craft-slot.dragging {
   opacity: 0.42;
+}
+
+.craft-arrow {
+  color: #4b4b4b;
+  font-size: 24px;
+  font-weight: 900;
+  text-shadow: 1px 1px 0 rgba(255, 255, 255, 0.65);
+}
+
+.craft-result-slot:disabled {
+  cursor: default;
+  opacity: 0.55;
 }
 
 .ghost-cell {
@@ -1081,10 +1108,16 @@ button {
   }
 
   .craft-cell,
-  .inventory-slot {
+  .inventory-slot,
+  .craft-slot,
+  .craft-result-slot {
     width: 100%;
     min-width: 0;
     aspect-ratio: 1;
     height: auto;
+  }
+
+  .crafting-area {
+    grid-template-columns: minmax(92px, auto) 24px minmax(32px, 42px);
   }
 }

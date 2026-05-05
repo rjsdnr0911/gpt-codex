@@ -2,8 +2,8 @@ import * as THREE from "three";
 import { TileId } from "./blocks";
 
 const TILE_SIZE = 32;
-const COLUMNS = 4;
-const ROWS = 4;
+const COLUMNS = 5;
+const ROWS = 5;
 const ATLAS_WIDTH = COLUMNS * TILE_SIZE;
 const ATLAS_HEIGHT = ROWS * TILE_SIZE;
 
@@ -185,6 +185,55 @@ function drawCraftingTable(ctx: CanvasRenderingContext2D): void {
   ctx.fillRect(ox + 6, oy + 14, 20, 2);
 }
 
+function drawOre(ctx: CanvasRenderingContext2D, tile: TileId, gemA: string, gemB: string): void {
+  drawDitheredTile(ctx, tile, { r: 111, g: 118, b: 118 }, 28, 2);
+  drawStoneCracks(ctx, tile);
+  const [oreX, oreY] = tileOrigin(tile);
+
+  for (let index = 0; index < 14; index += 1) {
+    const x = Math.floor(pseudoNoise(tile, index, 3) * 28) + 2;
+    const y = Math.floor(pseudoNoise(tile, index, 11) * 28) + 2;
+    ctx.fillStyle = index % 2 === 0 ? gemA : gemB;
+    ctx.fillRect(oreX + x, oreY + y, index % 3 === 0 ? 4 : 3, 3);
+  }
+}
+
+function drawFurnace(ctx: CanvasRenderingContext2D, tile: TileId, front: boolean): void {
+  drawDitheredTile(ctx, tile, { r: 104, g: 111, b: 108 }, 28, 2);
+  drawStoneCracks(ctx, tile);
+  if (!front) {
+    return;
+  }
+
+  const [ox, oy] = tileOrigin(tile);
+  ctx.fillStyle = "rgba(20, 22, 22, 0.72)";
+  ctx.fillRect(ox + 7, oy + 8, 18, 12);
+  ctx.fillStyle = "rgba(255, 143, 44, 0.82)";
+  ctx.fillRect(ox + 10, oy + 22, 12, 4);
+}
+
+function drawChest(ctx: CanvasRenderingContext2D): void {
+  drawDitheredTile(ctx, TileId.Chest, { r: 156, g: 98, b: 44 }, 30, 2);
+  const [ox, oy] = tileOrigin(TileId.Chest);
+  ctx.fillStyle = "rgba(62, 35, 17, 0.58)";
+  ctx.fillRect(ox, oy + 14, TILE_SIZE, 3);
+  ctx.fillRect(ox + 4, oy + 4, 3, 24);
+  ctx.fillRect(ox + 25, oy + 4, 3, 24);
+  ctx.fillStyle = "#d7c16a";
+  ctx.fillRect(ox + 14, oy + 13, 5, 7);
+}
+
+function drawTorch(ctx: CanvasRenderingContext2D): void {
+  const [ox, oy] = tileOrigin(TileId.Torch);
+  ctx.clearRect(ox, oy, TILE_SIZE, TILE_SIZE);
+  ctx.fillStyle = "#80502a";
+  ctx.fillRect(ox + 14, oy + 12, 5, 18);
+  ctx.fillStyle = "#ff9c2e";
+  ctx.fillRect(ox + 10, oy + 4, 13, 10);
+  ctx.fillStyle = "#ffe06a";
+  ctx.fillRect(ox + 13, oy + 2, 7, 7);
+}
+
 export function createTextureAtlas(): THREE.CanvasTexture {
   const canvas = document.createElement("canvas");
   canvas.width = ATLAS_WIDTH;
@@ -206,19 +255,22 @@ export function createTextureAtlas(): THREE.CanvasTexture {
   drawLogSide(ctx);
   drawLogTop(ctx);
   drawDitheredTile(ctx, TileId.Leaves, { r: 64, g: 137, b: 75 }, 42, 2);
-  drawDitheredTile(ctx, TileId.Ore, { r: 111, g: 118, b: 118 }, 28, 2);
-  drawStoneCracks(ctx, TileId.Ore);
+  drawOre(ctx, TileId.Ore, "#66d3d8", "#d8fff8");
   drawBrick(ctx);
   drawPlanks(ctx);
   drawCraftingTable(ctx);
-
-  const [oreX, oreY] = tileOrigin(TileId.Ore);
-  for (let index = 0; index < 16; index += 1) {
-    const x = Math.floor(pseudoNoise(TileId.Ore, index, 3) * 28) + 2;
-    const y = Math.floor(pseudoNoise(TileId.Ore, index, 11) * 28) + 2;
-    ctx.fillStyle = index % 2 === 0 ? "#66d3d8" : "#d8fff8";
-    ctx.fillRect(oreX + x, oreY + y, 3, 3);
-  }
+  drawOre(ctx, TileId.CoalOre, "#242827", "#585f5c");
+  drawOre(ctx, TileId.CopperOre, "#c9794a", "#6ecf9a");
+  drawOre(ctx, TileId.IronOre, "#d3aa8e", "#f0d8b8");
+  drawOre(ctx, TileId.GoldOre, "#f2c84b", "#ffe899");
+  drawOre(ctx, TileId.RedstoneOre, "#d8423a", "#ff7a69");
+  drawOre(ctx, TileId.LapisOre, "#345bd2", "#5d8cff");
+  drawOre(ctx, TileId.DiamondOre, "#65e0dc", "#d8fff8");
+  drawOre(ctx, TileId.EmeraldOre, "#4bd66d", "#a6ffc0");
+  drawFurnace(ctx, TileId.FurnaceFront, true);
+  drawFurnace(ctx, TileId.FurnaceSide, false);
+  drawChest(ctx);
+  drawTorch(ctx);
 
   const texture = new THREE.CanvasTexture(canvas);
   texture.magFilter = THREE.NearestFilter;

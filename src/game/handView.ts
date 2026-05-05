@@ -13,8 +13,8 @@ export class HandView {
 
   constructor(camera: THREE.PerspectiveCamera) {
     this.root.name = "FirstPersonHand";
-    this.root.position.set(0.48, -0.46, -0.82);
-    this.root.rotation.set(-0.22, -0.2, 0.02);
+    this.root.position.set(0.43, -0.5, -0.78);
+    this.root.rotation.set(-0.18, -0.16, 0.02);
     this.root.renderOrder = 30;
 
     this.hand.position.set(0.08, -0.04, 0.12);
@@ -52,8 +52,8 @@ export class HandView {
 
     const bob = Math.sin(performance.now() * 0.006) * 0.012;
     const swingOffset = Math.sin(this.swing * Math.PI) * 0.22;
-    this.root.position.set(0.48 - swingOffset * 0.1, -0.46 + bob - swingOffset * 0.08, -0.82 - swingOffset * 0.18);
-    this.root.rotation.set(-0.22 - swingOffset * 0.65, -0.2 - swingOffset * 0.16, 0.02 + swingOffset * 0.2);
+    this.root.position.set(0.43 - swingOffset * 0.08, -0.5 + bob - swingOffset * 0.06, -0.78 - swingOffset * 0.14);
+    this.root.rotation.set(-0.18 - swingOffset * 0.48, -0.16 - swingOffset * 0.12, 0.02 + swingOffset * 0.16);
   }
 
   private rebuildItem(stack: ItemStack | null): void {
@@ -83,20 +83,20 @@ export class HandView {
 
     if (definition.toolKind === "pickaxe") {
       const handle = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.44, 0.06), this.makeMaterial("#8a5b33"));
-      handle.position.set(-0.06, 0.08, -0.18);
-      handle.rotation.set(0.16, 0.1, -0.64);
+      handle.position.set(-0.04, 0.06, -0.18);
+      handle.rotation.set(0.08, 0.08, -0.38);
 
       const head = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.08, 0.08), material);
-      head.position.set(-0.14, 0.25, -0.24);
-      head.rotation.set(0.16, 0.1, -0.64);
+      head.position.set(-0.12, 0.25, -0.23);
+      head.rotation.set(0.08, 0.08, -0.38);
 
       const toothA = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.18, 0.08), material);
-      toothA.position.set(-0.28, 0.22, -0.24);
-      toothA.rotation.set(0.16, 0.1, -0.64);
+      toothA.position.set(-0.27, 0.21, -0.23);
+      toothA.rotation.set(0.08, 0.08, -0.38);
 
-      const toothB = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.16, 0.08), material);
-      toothB.position.set(0, 0.28, -0.24);
-      toothB.rotation.set(0.16, 0.1, -0.64);
+      const toothB = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.12, 0.08), material);
+      toothB.position.set(0.04, 0.31, -0.23);
+      toothB.rotation.set(0.08, 0.08, -0.38);
 
       this.itemRoot.add(handle, head, toothA, toothB);
       return;

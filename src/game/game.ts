@@ -6,18 +6,27 @@ import {
   addStack,
   clickSlot,
   createInventoryState,
-  moveSlotStack,
   normalizeInventory,
+  removeItems,
   selectedStack,
   shiftClickSlot,
   swapWithHotbar
 } from "./inventory";
 import { InputController, MouseActions } from "./input";
-import { blockFromItem, ITEM_DEFINITIONS, ItemId } from "./items";
-import { clamp } from "./math";
+import { blockFromItem, ITEM_DEFINITIONS, ItemId, ItemStack, maxStackFor, stacksMatch, ToolTier } from "./items";
+import { clamp, hash3 } from "./math";
 import { Player } from "./player";
-import { canCraft, craft, RECIPES, recipeIsUnlocked } from "./recipes";
+import {
+  canCraft,
+  consumeRecipeGrid,
+  matchRecipeFromGrid,
+  RECIPES,
+  recipeIngredients,
+  recipeIsUnlocked,
+  recipeLayout
+} from "./recipes";
 import { HandView } from "./handView";
+import { canSmelt, smelt, SMELTING_RECIPES } from "./smelting";
 import {
   SaveIndexV2,
   SaveSystem,
@@ -27,7 +36,7 @@ import {
 import { createSurvivalState, SurvivalController, SurvivalState } from "./survival";
 import { SkySystem } from "./sky";
 import { createVoxelMaterials, VoxelMaterials } from "./textureAtlas";
-import { World } from "./world";
+import { WORLDGEN_VERSION, World } from "./world";
 import { Hud, HudMode, RecipeView, WorldSummary } from "../ui/hud";
 
 interface VoxelHit {
@@ -76,6 +85,8 @@ export class Game {
   private saveIndex: SaveIndexV2 = { version: 2, activeWorldId: null, worlds: [] };
   private activeWorld: WorldSaveV2 | null = null;
   private inventory: InventoryState = createInventoryState();
+  private craftingGrid: Array<ItemStack | null> = Array.from({ length: 9 }, () => null);
+  private craftingGridSize: 2 | 3 = 2;
   private survival!: SurvivalController;
   private unlockedRecipes = new Set<string>();
   private mining: MiningState | null = null;
@@ -88,6 +99,7 @@ export class Game {
   async boot(): Promise<void> {
     this.shell = document.createElement("div");
     this.shell.className = "game-shell";
+    this.shell.addEventListener("contextmenu", this.preventGameContextMenu);
     this.root.replaceChildren(this.shell);
 
     this.renderer = new THREE.WebGLRenderer({
@@ -134,9 +146,15 @@ export class Game {
       },
       onRespawn: () => this.respawn(),
       onInventorySlot: (index, button, shift) => this.handleInventoryClick(index, button, shift),
-      onInventoryDrop: (fromIndex, toIndex) => this.handleInventoryDrop(fromIndex, toIndex),
+      onCraftSlot: (index, button, shift) => this.handleCraftingSlotClick(index, button, shift),
+      onCraftResult: (shift) => this.handleCraftingResult(shift),
+      onSlotDrop: (fromRef, toRef) => this.handleSlotDrop(fromRef, toRef),
       onHotbarKeySwap: (index, hotbarSlot) => this.handleHotbarSwap(index, hotbarSlot),
-      onCraftRecipe: (recipeId, craftAll, gridSize) => this.handleCraft(recipeId, craftAll, gridSize),
+      onCraftRecipe: (recipeId, craftAll, gridSize) => this.handleRecipeFill(recipeId, craftAll, gridSize),
+      onSmeltRecipe: (recipeId, smeltAll) => this.handleSmelt(recipeId, smeltAll),
+      onRegenerateWorld: (id) => {
+        void this.regenerateWorldCopy(id);
+      },
       onResetAll: () => {
         void this.resetAll();
       }
@@ -194,6 +212,7 @@ export class Game {
     const spawn = new THREE.Vector3().fromArray(legacy.player.position);
     return {
       version: 2,
+      worldgenVersion: 2,
       id: "legacy-world",
       name: "Migrated World",
       seed: legacy.seed,
@@ -209,7 +228,7 @@ export class Game {
 
   private loadPreviewWorld(): void {
     const seed = "frontier-aurora";
-    this.replaceWorld(seed, []);
+    this.replaceWorld(seed, [], WORLDGEN_VERSION);
     const spawn = this.world.findSpawn();
     this.player = new Player(this.camera, spawn);
     this.player.yaw = this.world.findScenicYaw(spawn);
@@ -221,7 +240,7 @@ export class Game {
 
   private loadWorld(save: WorldSaveV2, startPlaying: boolean): void {
     this.activeWorld = save;
-    this.replaceWorld(save.seed, save.modified);
+    this.replaceWorld(save.seed, save.modified, save.worldgenVersion ?? 2);
     this.player = new Player(this.camera, this.world.findSpawn());
     this.player.restore(save.player);
     this.inventory = normalizeInventory(save.inventory);
@@ -236,12 +255,12 @@ export class Game {
     }
   }
 
-  private replaceWorld(seed: string, modified: WorldSaveV2["modified"]): void {
+  private replaceWorld(seed: string, modified: WorldSaveV2["modified"], worldgenVersion = WORLDGEN_VERSION): void {
     if (this.world) {
       this.scene.remove(this.world.group);
     }
 
-    this.world = new World(seed, this.materials);
+    this.world = new World(seed, this.materials, worldgenVersion);
     this.world.setModifiedBlocks(modified);
     this.scene.add(this.world.group);
   }
@@ -250,7 +269,7 @@ export class Game {
     this.setMode("loading");
     const now = Date.now();
     const id = `world-${now.toString(36)}`;
-    this.replaceWorld(seed, []);
+    this.replaceWorld(seed, [], WORLDGEN_VERSION);
     const spawn = this.world.findSpawn();
     const player = new Player(this.camera, spawn);
     player.yaw = this.world.findScenicYaw(spawn);
@@ -258,6 +277,7 @@ export class Game {
     const survival = createSurvivalState(spawn);
     const save: WorldSaveV2 = {
       version: 2,
+      worldgenVersion: WORLDGEN_VERSION,
       id,
       name,
       seed,
@@ -292,6 +312,40 @@ export class Game {
       this.activeWorld = null;
       this.loadPreviewWorld();
     }
+    this.setMode("worldSelect");
+  }
+
+  private async regenerateWorldCopy(id: string): Promise<void> {
+    const source = this.saveIndex.worlds.find((entry) => entry.id === id);
+    if (!source) {
+      this.hud.showToast("World not found");
+      return;
+    }
+
+    const now = Date.now();
+    const world = new World(source.seed, this.materials, WORLDGEN_VERSION);
+    const spawn = world.findSpawn();
+    const player = new Player(this.camera, spawn);
+    player.yaw = world.findScenicYaw(spawn);
+    player.pitch = -0.08;
+    const save: WorldSaveV2 = {
+      version: 2,
+      worldgenVersion: WORLDGEN_VERSION,
+      id: `world-${now.toString(36)}-caves`,
+      name: `${source.name} Caves Copy`,
+      seed: source.seed,
+      createdAt: now,
+      updatedAt: now,
+      modified: [],
+      player: player.snapshot(0),
+      inventory: createInventoryState(),
+      survival: createSurvivalState(spawn),
+      unlockedRecipes: []
+    };
+
+    this.saveIndex = await this.saveSystem.upsertWorld(save);
+    this.hud.setWorlds(this.worldSummaries());
+    this.hud.showToast("Created cave world copy");
     this.setMode("worldSelect");
   }
 
@@ -331,6 +385,24 @@ export class Game {
   private setMode(mode: HudMode): void {
     this.mode = mode;
     this.hud.setMode(mode);
+  }
+
+  private readonly preventGameContextMenu = (event: MouseEvent): void => {
+    if (this.isEditableTarget(event.target)) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+  };
+
+  private isEditableTarget(target: EventTarget | null): boolean {
+    return (
+      target instanceof HTMLInputElement ||
+      target instanceof HTMLTextAreaElement ||
+      target instanceof HTMLSelectElement ||
+      (target instanceof HTMLElement && target.isContentEditable)
+    );
   }
 
   private setupEnvironment(): void {
@@ -406,7 +478,7 @@ export class Game {
         if (document.pointerLockElement) {
           void document.exitPointerLock();
         }
-      } else if (this.mode === "inventory" || this.mode === "craftingTable") {
+      } else if (this.mode === "inventory" || this.mode === "craftingTable" || this.mode === "furnace") {
         this.closeOpenContainer(false);
       } else if (this.mode === "paused") {
         this.resumeGame();
@@ -417,21 +489,36 @@ export class Game {
 
     if (this.input.consumePressed("KeyE")) {
       if (this.mode === "playing") {
-        this.setMode("inventory");
+        this.openCraftingPanel("inventory");
         if (document.pointerLockElement) {
           void document.exitPointerLock();
         }
-      } else if (this.mode === "inventory" || this.mode === "craftingTable") {
+      } else if (this.mode === "inventory" || this.mode === "craftingTable" || this.mode === "furnace") {
         this.closeOpenContainer(true);
       }
     }
   }
 
   private closeOpenContainer(lockPointer: boolean): void {
+    if (!this.returnCraftingGridToInventory()) {
+      this.hud.showToast("Make room before closing");
+      return;
+    }
+
     this.setMode("playing");
     if (lockPointer) {
       this.input.requestPointerLock();
     }
+  }
+
+  private openCraftingPanel(mode: "inventory" | "craftingTable" | "furnace"): void {
+    if (!this.returnCraftingGridToInventory()) {
+      this.hud.showToast("Make room in inventory first");
+      return;
+    }
+
+    this.craftingGridSize = mode === "inventory" ? 2 : 3;
+    this.setMode(mode);
   }
 
   private updatePlaying(delta: number): void {
@@ -504,11 +591,25 @@ export class Game {
     const held = selectedStack(this.inventory);
     const heldDef = held ? ITEM_DEFINITIONS[held.item] : null;
 
-    if (this.selectedHit && BLOCKS[this.selectedHit.block].interactable === "crafting_table" && !sneaking) {
+    const interactable = this.selectedHit ? BLOCKS[this.selectedHit.block].interactable : null;
+    if (this.selectedHit && interactable === "crafting_table" && !sneaking) {
       if (document.pointerLockElement) {
         void document.exitPointerLock();
       }
-      this.setMode("craftingTable");
+      this.openCraftingPanel("craftingTable");
+      return;
+    }
+
+    if (this.selectedHit && interactable === "furnace" && !sneaking) {
+      if (document.pointerLockElement) {
+        void document.exitPointerLock();
+      }
+      this.openCraftingPanel("furnace");
+      return;
+    }
+
+    if (this.selectedHit && interactable === "chest" && !sneaking) {
+      this.hud.showToast("Chest storage is coming next");
       return;
     }
 
@@ -548,7 +649,10 @@ export class Game {
     const held = selectedStack(this.inventory);
     const itemDefinition = held ? ITEM_DEFINITIONS[held.item] : null;
     const toolMatches = itemDefinition?.toolKind && itemDefinition.toolKind === definition.preferredTool;
-    const requiredMatches = !definition.requiredTool || itemDefinition?.toolKind === definition.requiredTool;
+    const requiredMatches =
+      !definition.requiredTool ||
+      (itemDefinition?.toolKind === definition.requiredTool &&
+        this.tierMeets(itemDefinition.toolTier ?? "hand", definition.requiredTier ?? "wood"));
     const speed = toolMatches ? itemDefinition?.miningSpeed ?? 1 : 1;
     const penalty = requiredMatches ? 1 : 4.2;
     return Math.max(0.18, definition.hardness * 0.85 * penalty / speed);
@@ -558,7 +662,10 @@ export class Game {
     const definition = BLOCKS[hit.block];
     const held = selectedStack(this.inventory);
     const itemDefinition = held ? ITEM_DEFINITIONS[held.item] : null;
-    const canDrop = !definition.requiredTool || itemDefinition?.toolKind === definition.requiredTool;
+    const canDrop =
+      !definition.requiredTool ||
+      (itemDefinition?.toolKind === definition.requiredTool &&
+        this.tierMeets(itemDefinition.toolTier ?? "hand", definition.requiredTier ?? "wood"));
     const changed = this.world.setBlock(hit.x, hit.y, hit.z, BlockType.Air);
 
     if (!changed) {
@@ -566,14 +673,30 @@ export class Game {
     }
 
     let drop = canDrop ? (definition.drops as ItemId | null) : null;
+    let dropCount = 1;
 
     if (hit.block === BlockType.Leaves && Math.random() < 0.12) {
       drop = "apple";
     }
 
+    if (hit.block === BlockType.RedstoneOre) {
+      dropCount = 4 + Math.floor(Math.random() * 2);
+    }
+
+    if (hit.block === BlockType.LapisOre) {
+      dropCount = 4 + Math.floor(Math.random() * 5);
+    }
+
     if (drop) {
-      const remaining = addStack(this.inventory, { item: drop, count: 1 });
+      const remaining = addStack(this.inventory, { item: drop, count: dropCount });
       this.hud.showToast(remaining ? "Inventory full" : `Picked up ${ITEM_DEFINITIONS[drop].name}`);
+    }
+
+    if (hit.block === BlockType.Chest) {
+      for (const loot of this.chestLoot(hit)) {
+        addStack(this.inventory, loot);
+      }
+      this.hud.showToast("Found chest supplies");
     }
 
     this.damageHeldTool();
@@ -593,6 +716,28 @@ export class Game {
       this.inventory.slots[index] = null;
       this.hud.showToast("Tool broke");
     }
+  }
+
+  private chestLoot(hit: VoxelHit): ItemStack[] {
+    const roll = (salt: number) => hash3(this.world.seedInt ^ salt, hit.x, hit.y, hit.z);
+    const loot: ItemStack[] = [
+      { item: "coal", count: 2 + Math.floor(roll(0xc0a1) * 4) },
+      { item: "torch", count: 2 + Math.floor(roll(0x70c4) * 5) }
+    ];
+
+    if (roll(0x1f0a) > 0.45) {
+      loot.push({ item: "raw_iron", count: 1 + Math.floor(roll(0x10e) * 3) });
+    }
+
+    if (roll(0xa991e) > 0.72) {
+      loot.push({ item: "apple", count: 1 + Math.floor(roll(0xa991) * 2) });
+    }
+
+    if (roll(0xd1a) > 0.9) {
+      loot.push({ item: "diamond", count: 1 });
+    }
+
+    return loot;
   }
 
   private consumeSelected(count: number): void {
@@ -617,8 +762,17 @@ export class Game {
     this.queueSave();
   }
 
-  private handleInventoryDrop(fromIndex: number, toIndex: number): void {
-    moveSlotStack(this.inventory, fromIndex, toIndex);
+  private handleCraftingSlotClick(index: number, button: 0 | 2, shift: boolean): void {
+    if (shift) {
+      const stack = this.craftingGrid[index];
+      if (stack) {
+        const leftover = addStack(this.inventory, stack);
+        this.craftingGrid[index] = leftover;
+      }
+    } else {
+      this.clickExternalSlot(this.craftingGrid, index, button);
+    }
+
     this.unlockRecipesFromInventory();
     this.queueSave();
   }
@@ -628,17 +782,262 @@ export class Game {
     this.queueSave();
   }
 
-  private handleCraft(recipeId: string, craftAll: boolean, gridSize: 2 | 3): void {
-    const recipe = RECIPES.find((entry) => entry.id === recipeId);
-    if (!recipe || !canCraft(recipe, this.inventory, gridSize)) {
+  private handleSlotDrop(fromRef: string, toRef: string): void {
+    if (fromRef === toRef) {
       return;
     }
-    const made = craft(recipe, this.inventory, gridSize, craftAll);
+
+    const from = this.getSlotByRef(fromRef);
+    const to = this.getSlotByRef(toRef);
+    if (!from) {
+      return;
+    }
+
+    if (!to) {
+      this.setSlotByRef(toRef, from);
+      this.setSlotByRef(fromRef, null);
+    } else if (stacksMatch(from, to)) {
+      const max = maxStackFor(to.item);
+      const move = Math.min(max - to.count, from.count);
+      to.count += move;
+      from.count -= move;
+      if (from.count <= 0) {
+        this.setSlotByRef(fromRef, null);
+      }
+    } else {
+      this.setSlotByRef(fromRef, to);
+      this.setSlotByRef(toRef, from);
+    }
+
+    this.unlockRecipesFromInventory();
+    this.queueSave();
+  }
+
+  private handleCraftingResult(shift: boolean): void {
+    const activeGrid = this.activeCraftingGrid();
+    const recipe = matchRecipeFromGrid(activeGrid, this.craftingGridSize);
+    if (!recipe) {
+      return;
+    }
+
+    const result = { ...recipe.result };
+
+    if (shift) {
+      let made = 0;
+      while (matchRecipeFromGrid(this.activeCraftingGrid(), this.craftingGridSize)?.id === recipe.id) {
+        if (!this.inventoryCanAccept(result)) {
+          break;
+        }
+        consumeRecipeGrid(this.craftingGrid, recipe, this.craftingGridSize);
+        addStack(this.inventory, { ...result });
+        made += result.count;
+        if (made >= 64) {
+          break;
+        }
+      }
+    } else {
+      const cursor = this.inventory.cursor;
+      if (cursor && (!stacksMatch(cursor, result) || cursor.count + result.count > maxStackFor(cursor.item))) {
+        return;
+      }
+
+      consumeRecipeGrid(this.craftingGrid, recipe, this.craftingGridSize);
+      if (cursor) {
+        cursor.count += result.count;
+      } else {
+        this.inventory.cursor = result;
+      }
+    }
+
+    this.unlockedRecipes.add(recipe.id);
+    this.unlockRecipesFromInventory();
+    this.queueSave();
+  }
+
+  private handleRecipeFill(recipeId: string, craftAll: boolean, gridSize: 2 | 3): void {
+    const recipe = RECIPES.find((entry) => entry.id === recipeId);
+    if (!recipe || !canCraft(recipe, this.inventory, gridSize) || !this.returnCraftingGridToInventory()) {
+      return;
+    }
+
+    this.craftingGridSize = gridSize;
+    const layout = recipeLayout(recipe, gridSize);
+    if (!layout) {
+      return;
+    }
+
+    const multiplier = craftAll ? this.maxCraftable(recipe) : 1;
+    for (let index = 0; index < layout.length; index += 1) {
+      const item = layout[index];
+      if (!item) {
+        continue;
+      }
+      removeItems(this.inventory, item, multiplier);
+      this.craftingGrid[index] = { item, count: multiplier };
+    }
+
+    this.queueSave();
+  }
+
+  private handleSmelt(recipeId: string, smeltAll: boolean): void {
+    const recipe = SMELTING_RECIPES.find((entry) => entry.id === recipeId);
+    if (!recipe || !canSmelt(recipe, this.inventory)) {
+      return;
+    }
+
+    const made = smelt(recipe, this.inventory, smeltAll);
     if (made > 0) {
-      this.unlockedRecipes.add(recipe.id);
+      this.hud.showToast(`Smelted ${recipe.name}`);
       this.unlockRecipesFromInventory();
       this.queueSave();
     }
+  }
+
+  private activeCraftingGrid(): Array<ItemStack | null> {
+    return this.craftingGrid.slice(0, this.craftingGridSize * this.craftingGridSize);
+  }
+
+  private returnCraftingGridToInventory(): boolean {
+    for (const stack of this.craftingGrid) {
+      if (stack && !this.inventoryCanAccept(stack)) {
+        return false;
+      }
+    }
+
+    for (let index = 0; index < this.craftingGrid.length; index += 1) {
+      const stack = this.craftingGrid[index];
+      if (stack) {
+        addStack(this.inventory, stack);
+        this.craftingGrid[index] = null;
+      }
+    }
+
+    return true;
+  }
+
+  private inventoryCanAccept(stack: ItemStack): boolean {
+    let remaining = stack.count;
+
+    for (const slot of this.inventory.slots) {
+      if (!slot || !stacksMatch(slot, stack)) {
+        continue;
+      }
+      remaining -= Math.max(0, maxStackFor(slot.item) - slot.count);
+      if (remaining <= 0) {
+        return true;
+      }
+    }
+
+    for (const slot of this.inventory.slots) {
+      if (slot) {
+        continue;
+      }
+      remaining -= maxStackFor(stack.item);
+      if (remaining <= 0) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  private clickExternalSlot(slots: Array<ItemStack | null>, index: number, button: 0 | 2): void {
+    const slot = slots[index] ?? null;
+    const cursor = this.inventory.cursor;
+
+    if (button === 0) {
+      if (!cursor) {
+        this.inventory.cursor = slot;
+        slots[index] = null;
+        return;
+      }
+
+      if (!slot) {
+        slots[index] = cursor;
+        this.inventory.cursor = null;
+        return;
+      }
+
+      if (stacksMatch(slot, cursor)) {
+        const move = Math.min(maxStackFor(slot.item) - slot.count, cursor.count);
+        slot.count += move;
+        cursor.count -= move;
+        if (cursor.count <= 0) {
+          this.inventory.cursor = null;
+        }
+        return;
+      }
+
+      slots[index] = cursor;
+      this.inventory.cursor = slot;
+      return;
+    }
+
+    if (!cursor && slot) {
+      const take = Math.ceil(slot.count / 2);
+      this.inventory.cursor = { ...slot, count: take };
+      slot.count -= take;
+      if (slot.count <= 0) {
+        slots[index] = null;
+      }
+      return;
+    }
+
+    if (cursor && !slot) {
+      slots[index] = { ...cursor, count: 1 };
+      cursor.count -= 1;
+      if (cursor.count <= 0) {
+        this.inventory.cursor = null;
+      }
+      return;
+    }
+
+    if (cursor && slot && stacksMatch(cursor, slot) && slot.count < maxStackFor(slot.item)) {
+      slot.count += 1;
+      cursor.count -= 1;
+      if (cursor.count <= 0) {
+        this.inventory.cursor = null;
+      }
+    }
+  }
+
+  private getSlotByRef(ref: string): ItemStack | null {
+    if (ref.startsWith("inventory:")) {
+      return this.inventory.slots[Number(ref.replace("inventory:", ""))] ?? null;
+    }
+
+    if (ref.startsWith("craft:")) {
+      return this.craftingGrid[Number(ref.replace("craft:", ""))] ?? null;
+    }
+
+    return null;
+  }
+
+  private setSlotByRef(ref: string, stack: ItemStack | null): void {
+    if (ref.startsWith("inventory:")) {
+      this.inventory.slots[Number(ref.replace("inventory:", ""))] = stack;
+    }
+
+    if (ref.startsWith("craft:")) {
+      this.craftingGrid[Number(ref.replace("craft:", ""))] = stack;
+    }
+  }
+
+  private maxCraftable(recipe: (typeof RECIPES)[number]): number {
+    const ingredients = recipeIngredients(recipe);
+    let max = Infinity;
+
+    for (const [item, count] of Object.entries(ingredients)) {
+      const total = this.inventory.slots.reduce((sum, slot) => sum + (slot?.item === item ? slot.count : 0), 0);
+      max = Math.min(max, Math.floor(total / count));
+    }
+
+    return Math.max(1, Math.min(64, Number.isFinite(max) ? max : 1));
+  }
+
+  private tierMeets(actual: ToolTier, required: ToolTier): boolean {
+    const order: ToolTier[] = ["hand", "wood", "stone", "iron", "diamond"];
+    return order.indexOf(actual) >= order.indexOf(required);
   }
 
   private unlockRecipesFromInventory(): void {
@@ -754,12 +1153,19 @@ export class Game {
 
     try {
       const now = Date.now();
+      const inventoryForSave = normalizeInventory(this.inventory);
+      for (const stack of this.craftingGrid) {
+        if (stack) {
+          addStack(inventoryForSave, { ...stack });
+        }
+      }
       const save: WorldSaveV2 = {
         ...this.activeWorld,
+        worldgenVersion: this.activeWorld.worldgenVersion ?? this.world.worldgenVersion,
         updatedAt: now,
         modified: this.world.exportModifiedBlocks(),
         player: this.player.snapshot(this.inventory.selectedHotbarSlot),
-        inventory: normalizeInventory(this.inventory),
+        inventory: inventoryForSave,
         survival: { ...this.survival.state },
         unlockedRecipes: [...this.unlockedRecipes]
       };
@@ -779,9 +1185,10 @@ export class Game {
     const position = this.player.position;
     const stats = this.world.getStats();
     const selected = selectedStack(this.inventory);
+    const craftingResult = matchRecipeFromGrid(this.activeCraftingGrid(), this.craftingGridSize)?.result ?? null;
     const recipeViews: RecipeView[] = RECIPES.map((recipe) => ({
       recipe,
-      craftable: canCraft(recipe, this.inventory, this.mode === "craftingTable" ? 3 : 2),
+      craftable: canCraft(recipe, this.inventory, this.craftingGridSize),
       unlocked: recipeIsUnlocked(recipe, this.unlockedRecipes, this.inventory)
     }));
 
@@ -797,7 +1204,13 @@ export class Game {
       miningProgress: this.mining?.progress ?? 0,
       selectedBlock: this.selectedHit?.block ?? null,
       activeWorldName: this.activeWorld?.name ?? "Preview",
-      recipes: recipeViews
+      recipes: recipeViews,
+      craftingGrid: this.activeCraftingGrid(),
+      craftingResult: craftingResult ? { ...craftingResult } : null,
+      smeltingRecipes: SMELTING_RECIPES.map((recipe) => ({
+        recipe,
+        smeltable: canSmelt(recipe, this.inventory)
+      }))
     });
   }
 

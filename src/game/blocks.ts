@@ -15,7 +15,18 @@ export const enum BlockType {
   Ore = 8,
   Brick = 9,
   Planks = 10,
-  CraftingTable = 11
+  CraftingTable = 11,
+  CoalOre = 12,
+  CopperOre = 13,
+  IronOre = 14,
+  GoldOre = 15,
+  RedstoneOre = 16,
+  LapisOre = 17,
+  DiamondOre = 18,
+  EmeraldOre = 19,
+  Furnace = 20,
+  Chest = 21,
+  Torch = 22
 }
 
 export type BlockId =
@@ -30,7 +41,18 @@ export type BlockId =
   | "ore"
   | "brick"
   | "planks"
-  | "crafting_table";
+  | "crafting_table"
+  | "coal_ore"
+  | "copper_ore"
+  | "iron_ore"
+  | "gold_ore"
+  | "redstone_ore"
+  | "lapis_ore"
+  | "diamond_ore"
+  | "emerald_ore"
+  | "furnace"
+  | "chest"
+  | "torch";
 
 export const enum TileId {
   GrassTop = 0,
@@ -45,7 +67,19 @@ export const enum TileId {
   Ore = 9,
   Brick = 10,
   Planks = 11,
-  CraftingTable = 12
+  CraftingTable = 12,
+  CoalOre = 13,
+  CopperOre = 14,
+  IronOre = 15,
+  GoldOre = 16,
+  RedstoneOre = 17,
+  LapisOre = 18,
+  DiamondOre = 19,
+  EmeraldOre = 20,
+  FurnaceFront = 21,
+  FurnaceSide = 22,
+  Chest = 23,
+  Torch = 24
 }
 
 export type FaceName = "top" | "bottom" | "north" | "south" | "east" | "west";
@@ -62,8 +96,9 @@ export interface BlockDefinition {
   drops: string | null;
   preferredTool?: "pickaxe" | "axe" | "shovel";
   requiredTool?: "pickaxe" | "axe" | "shovel";
+  requiredTier?: "wood" | "stone" | "iron" | "diamond";
   placeableItem?: string;
-  interactable?: "crafting_table";
+  interactable?: "crafting_table" | "furnace" | "chest";
 }
 
 const allFaces = (tile: TileId): Record<FaceName, TileId> => ({
@@ -251,6 +286,175 @@ export const BLOCKS: Record<BlockType, BlockDefinition> = {
     preferredTool: "axe",
     placeableItem: "crafting_table",
     interactable: "crafting_table"
+  },
+  [BlockType.CoalOre]: {
+    id: "coal_ore",
+    displayName: "Coal Ore",
+    solid: true,
+    transparent: false,
+    fluid: false,
+    swatch: "#4b4d4b",
+    tiles: allFaces(TileId.CoalOre),
+    hardness: 3,
+    drops: "coal",
+    preferredTool: "pickaxe",
+    requiredTool: "pickaxe",
+    requiredTier: "wood",
+    placeableItem: "coal_ore"
+  },
+  [BlockType.CopperOre]: {
+    id: "copper_ore",
+    displayName: "Copper Ore",
+    solid: true,
+    transparent: false,
+    fluid: false,
+    swatch: "#a76846",
+    tiles: allFaces(TileId.CopperOre),
+    hardness: 3,
+    drops: "raw_copper",
+    preferredTool: "pickaxe",
+    requiredTool: "pickaxe",
+    requiredTier: "stone",
+    placeableItem: "copper_ore"
+  },
+  [BlockType.IronOre]: {
+    id: "iron_ore",
+    displayName: "Iron Ore",
+    solid: true,
+    transparent: false,
+    fluid: false,
+    swatch: "#b08f75",
+    tiles: allFaces(TileId.IronOre),
+    hardness: 3,
+    drops: "raw_iron",
+    preferredTool: "pickaxe",
+    requiredTool: "pickaxe",
+    requiredTier: "stone",
+    placeableItem: "iron_ore"
+  },
+  [BlockType.GoldOre]: {
+    id: "gold_ore",
+    displayName: "Gold Ore",
+    solid: true,
+    transparent: false,
+    fluid: false,
+    swatch: "#d6aa35",
+    tiles: allFaces(TileId.GoldOre),
+    hardness: 3,
+    drops: "raw_gold",
+    preferredTool: "pickaxe",
+    requiredTool: "pickaxe",
+    requiredTier: "iron",
+    placeableItem: "gold_ore"
+  },
+  [BlockType.RedstoneOre]: {
+    id: "redstone_ore",
+    displayName: "Redstone Ore",
+    solid: true,
+    transparent: false,
+    fluid: false,
+    swatch: "#b53634",
+    tiles: allFaces(TileId.RedstoneOre),
+    hardness: 3,
+    drops: "redstone_dust",
+    preferredTool: "pickaxe",
+    requiredTool: "pickaxe",
+    requiredTier: "iron",
+    placeableItem: "redstone_ore"
+  },
+  [BlockType.LapisOre]: {
+    id: "lapis_ore",
+    displayName: "Lapis Ore",
+    solid: true,
+    transparent: false,
+    fluid: false,
+    swatch: "#345dbc",
+    tiles: allFaces(TileId.LapisOre),
+    hardness: 3,
+    drops: "lapis_lazuli",
+    preferredTool: "pickaxe",
+    requiredTool: "pickaxe",
+    requiredTier: "stone",
+    placeableItem: "lapis_ore"
+  },
+  [BlockType.DiamondOre]: {
+    id: "diamond_ore",
+    displayName: "Diamond Ore",
+    solid: true,
+    transparent: false,
+    fluid: false,
+    swatch: "#58d6d0",
+    tiles: allFaces(TileId.DiamondOre),
+    hardness: 3,
+    drops: "diamond",
+    preferredTool: "pickaxe",
+    requiredTool: "pickaxe",
+    requiredTier: "iron",
+    placeableItem: "diamond_ore"
+  },
+  [BlockType.EmeraldOre]: {
+    id: "emerald_ore",
+    displayName: "Emerald Ore",
+    solid: true,
+    transparent: false,
+    fluid: false,
+    swatch: "#45bf62",
+    tiles: allFaces(TileId.EmeraldOre),
+    hardness: 3,
+    drops: "emerald",
+    preferredTool: "pickaxe",
+    requiredTool: "pickaxe",
+    requiredTier: "iron",
+    placeableItem: "emerald_ore"
+  },
+  [BlockType.Furnace]: {
+    id: "furnace",
+    displayName: "Furnace",
+    solid: true,
+    transparent: false,
+    fluid: false,
+    swatch: "#686e6b",
+    tiles: {
+      top: TileId.FurnaceSide,
+      bottom: TileId.FurnaceSide,
+      north: TileId.FurnaceFront,
+      south: TileId.FurnaceFront,
+      east: TileId.FurnaceSide,
+      west: TileId.FurnaceSide
+    },
+    hardness: 3.5,
+    drops: "furnace",
+    preferredTool: "pickaxe",
+    requiredTool: "pickaxe",
+    requiredTier: "wood",
+    placeableItem: "furnace",
+    interactable: "furnace"
+  },
+  [BlockType.Chest]: {
+    id: "chest",
+    displayName: "Chest",
+    solid: true,
+    transparent: false,
+    fluid: false,
+    swatch: "#9b642f",
+    tiles: allFaces(TileId.Chest),
+    hardness: 2.5,
+    drops: "chest",
+    preferredTool: "axe",
+    placeableItem: "chest",
+    interactable: "chest"
+  },
+  [BlockType.Torch]: {
+    id: "torch",
+    displayName: "Torch",
+    solid: false,
+    transparent: true,
+    fluid: false,
+    swatch: "#f0a83c",
+    tiles: allFaces(TileId.Torch),
+    hardness: 0.1,
+    drops: "torch",
+    placeableItem: "torch"
   }
 };
 
@@ -262,8 +466,8 @@ export const HOTBAR_BLOCKS: BlockType[] = [
   BlockType.Water,
   BlockType.Log,
   BlockType.Leaves,
-  BlockType.Ore,
-  BlockType.Brick
+  BlockType.CoalOre,
+  BlockType.Furnace
 ];
 
 export function blockKey(x: number, y: number, z: number): string {

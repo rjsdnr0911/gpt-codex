@@ -2,6 +2,7 @@ import { BLOCKS, BlockType } from "../game/blocks";
 import { HOTBAR_START, InventoryState } from "../game/inventory";
 import { ITEM_DEFINITIONS, ItemStack } from "../game/items";
 import { Recipe } from "../game/recipes";
+import { SmeltingRecipe } from "../game/smelting";
 import { SurvivalState } from "../game/survival";
 
 export type HudMode =
@@ -13,6 +14,7 @@ export type HudMode =
   | "paused"
   | "inventory"
   | "craftingTable"
+  | "furnace"
   | "gameOver";
 
 export interface WorldSummary {
@@ -39,9 +41,13 @@ export interface HudCallbacks {
   onQuitToTitle: () => void;
   onRespawn: () => void;
   onInventorySlot: (index: number, button: 0 | 2, shift: boolean) => void;
-  onInventoryDrop: (fromIndex: number, toIndex: number) => void;
+  onCraftSlot: (index: number, button: 0 | 2, shift: boolean) => void;
+  onCraftResult: (shift: boolean) => void;
+  onSlotDrop: (fromRef: string, toRef: string) => void;
   onHotbarKeySwap: (index: number, hotbarSlot: number) => void;
   onCraftRecipe: (recipeId: string, craftAll: boolean, gridSize: 2 | 3) => void;
+  onSmeltRecipe: (recipeId: string, smeltAll: boolean) => void;
+  onRegenerateWorld: (id: string) => void;
   onResetAll: () => void;
 }
 
@@ -58,6 +64,9 @@ export interface HudStats {
   selectedBlock: BlockType | null;
   activeWorldName: string;
   recipes: RecipeView[];
+  craftingGrid: Array<ItemStack | null>;
+  craftingResult: ItemStack | null;
+  smeltingRecipes: Array<{ recipe: SmeltingRecipe; smeltable: boolean }>;
 }
 
 export class Hud {
@@ -165,7 +174,7 @@ export class Hud {
     this.stats = stats;
     this.renderHud();
 
-    if (this.mode === "inventory" || this.mode === "craftingTable") {
+    if (this.mode === "inventory" || this.mode === "craftingTable" || this.mode === "furnace") {
       const signature = this.makePanelSignature(stats);
       if (signature === this.panelSignature) {
         return;
@@ -217,7 +226,7 @@ export class Hud {
   private renderMenu(): void {
     this.menuLayer.innerHTML = "";
 
-    if (this.mode === "playing" || this.mode === "inventory" || this.mode === "craftingTable") {
+    if (this.mode === "playing" || this.mode === "inventory" || this.mode === "craftingTable" || this.mode === "furnace") {
       this.menuLayer.hidden = true;
       return;
     }
@@ -257,13 +266,15 @@ export class Hud {
   private renderPanel(): void {
     this.panelLayer.innerHTML = "";
 
-    if (!this.stats || (this.mode !== "inventory" && this.mode !== "craftingTable")) {
+    if (!this.stats || (this.mode !== "inventory" && this.mode !== "craftingTable" && this.mode !== "furnace")) {
       this.panelLayer.hidden = true;
       return;
     }
 
     this.panelLayer.hidden = false;
-    this.panelLayer.append(this.makeInventoryPanel(this.mode === "craftingTable" ? 3 : 2));
+    this.panelLayer.append(
+      this.mode === "furnace" ? this.makeFurnacePanel() : this.makeInventoryPanel(this.mode === "craftingTable" ? 3 : 2)
+    );
   }
 
   private makeTitleMenu(): HTMLElement {
@@ -310,6 +321,12 @@ export class Hud {
       del.addEventListener("click", () => this.callbacks.onDeleteWorld(world.id));
 
       row.append(main, del);
+      const regen = document.createElement("button");
+      regen.className = "menu-button mini";
+      regen.type = "button";
+      regen.textContent = "Regenerate Caves Copy";
+      regen.addEventListener("click", () => this.callbacks.onRegenerateWorld(world.id));
+      row.append(regen);
       list.append(row);
     }
 
@@ -386,9 +403,10 @@ export class Hud {
       panel.style.setProperty("--cursor-x", `${event.clientX}px`);
       panel.style.setProperty("--cursor-y", `${event.clientY}px`);
 
-      const slot = (event.target as HTMLElement).closest<HTMLButtonElement>(".inventory-slot");
-      const slotIndex = Number(slot?.dataset.slot);
-      const stack = Number.isInteger(slotIndex) ? stats.inventory.slots[slotIndex] : null;
+      const slot = (event.target as HTMLElement).closest<HTMLButtonElement>(
+        ".inventory-slot, .craft-slot, .craft-result-slot"
+      );
+      const stack = this.stackFromSlotElement(slot);
       if (!stack) {
         tooltip.hidden = true;
         return;
@@ -431,13 +449,31 @@ export class Hud {
     playerPaper.className = "player-paper";
     playerPaper.textContent = "VF";
 
+    const craftingArea = document.createElement("div");
+    craftingArea.className = "crafting-area";
+
     const craftGrid = document.createElement("div");
     craftGrid.className = `craft-grid cells-${gridSize}`;
     for (let index = 0; index < gridSize * gridSize; index += 1) {
-      const cell = document.createElement("div");
-      cell.className = "craft-cell ghost-cell";
-      craftGrid.append(cell);
+      craftGrid.append(this.makeCraftSlot(index));
     }
+
+    const arrow = document.createElement("div");
+    arrow.className = "craft-arrow";
+    arrow.textContent = ">";
+
+    const result = document.createElement("button");
+    result.className = "craft-result-slot";
+    result.type = "button";
+    result.dataset.slotRef = "result";
+    result.disabled = !stats.craftingResult;
+    result.addEventListener("click", (event) => this.callbacks.onCraftResult((event as MouseEvent).shiftKey));
+    if (stats.craftingResult) {
+      result.title = ITEM_DEFINITIONS[stats.craftingResult.item].name;
+      result.append(this.makeItemIcon(stats.craftingResult), this.makeCount(stats.craftingResult.count));
+    }
+
+    craftingArea.append(craftGrid, arrow, result);
 
     const storage = document.createElement("div");
     storage.className = "storage-grid";
@@ -457,7 +493,44 @@ export class Hud {
       cursor.append(this.makeItemIcon(stats.inventory.cursor), this.makeCount(stats.inventory.cursor.count));
     }
 
-    panel.append(title, recipeBook, playerPaper, craftGrid, storage, hotbar, cursor, tooltip);
+    panel.append(title, recipeBook, playerPaper, craftingArea, storage, hotbar, cursor, tooltip);
+    return panel;
+  }
+
+  private makeFurnacePanel(): HTMLElement {
+    const stats = this.stats;
+    if (!stats) {
+      return document.createElement("div");
+    }
+
+    const panel = this.makeInventoryPanel(3);
+    panel.classList.add("furnace-panel");
+    const title = panel.querySelector(".inventory-title");
+    if (title) {
+      title.textContent = "Furnace";
+    }
+
+    const recipeBook = panel.querySelector(".recipe-book");
+    if (recipeBook) {
+      recipeBook.innerHTML = "";
+      const recipeTitle = document.createElement("div");
+      recipeTitle.className = "recipe-title";
+      recipeTitle.textContent = "Smelting";
+      recipeBook.append(recipeTitle);
+
+      for (const view of stats.smeltingRecipes) {
+        const button = document.createElement("button");
+        button.className = `recipe-card ${view.smeltable ? "craftable" : ""}`;
+        button.type = "button";
+        button.disabled = !view.smeltable;
+        button.addEventListener("click", (event) => {
+          this.callbacks.onSmeltRecipe(view.recipe.id, (event as MouseEvent).shiftKey);
+        });
+        button.append(this.makeItemIcon(view.recipe.result), document.createTextNode(view.recipe.name));
+        recipeBook.append(button);
+      }
+    }
+
     return panel;
   }
 
@@ -492,6 +565,7 @@ export class Hud {
     button.className = "inventory-slot";
     button.type = "button";
     button.dataset.slot = String(index);
+    button.dataset.slotRef = `inventory:${index}`;
     button.draggable = Boolean(stats?.inventory.slots[index]);
     button.addEventListener("click", (event) => {
       const hotbar = this.numberFromEvent(event as MouseEvent);
@@ -513,7 +587,7 @@ export class Hud {
       }
 
       event.dataTransfer.effectAllowed = "move";
-      event.dataTransfer.setData("text/plain", String(index));
+      event.dataTransfer.setData("text/plain", `inventory:${index}`);
       button.classList.add("dragging");
     });
     button.addEventListener("dragend", () => {
@@ -527,13 +601,66 @@ export class Hud {
     });
     button.addEventListener("drop", (event) => {
       event.preventDefault();
-      const from = Number(event.dataTransfer?.getData("text/plain"));
-      if (Number.isInteger(from)) {
-        this.callbacks.onInventoryDrop(from, index);
+      const from = event.dataTransfer?.getData("text/plain");
+      if (from) {
+        this.callbacks.onSlotDrop(from, `inventory:${index}`);
       }
     });
 
     const stack = stats?.inventory.slots[index] ?? null;
+    if (stack) {
+      const name = ITEM_DEFINITIONS[stack.item].name;
+      button.title = name;
+      button.setAttribute("aria-label", name);
+      button.append(this.makeItemIcon(stack), this.makeCount(stack.count));
+    }
+
+    return button;
+  }
+
+  private makeCraftSlot(index: number): HTMLButtonElement {
+    const stats = this.stats;
+    const button = document.createElement("button");
+    button.className = "craft-slot";
+    button.type = "button";
+    button.dataset.craftSlot = String(index);
+    button.dataset.slotRef = `craft:${index}`;
+    const stack = stats?.craftingGrid[index] ?? null;
+    button.draggable = Boolean(stack);
+    button.addEventListener("click", (event) => {
+      this.callbacks.onCraftSlot(index, 0, (event as MouseEvent).shiftKey);
+    });
+    button.addEventListener("contextmenu", (event) => {
+      event.preventDefault();
+      this.callbacks.onCraftSlot(index, 2, event.shiftKey);
+    });
+    button.addEventListener("dragstart", (event) => {
+      if (!stack || !event.dataTransfer) {
+        event.preventDefault();
+        return;
+      }
+
+      event.dataTransfer.effectAllowed = "move";
+      event.dataTransfer.setData("text/plain", `craft:${index}`);
+      button.classList.add("dragging");
+    });
+    button.addEventListener("dragend", () => {
+      button.classList.remove("dragging");
+    });
+    button.addEventListener("dragover", (event) => {
+      event.preventDefault();
+      if (event.dataTransfer) {
+        event.dataTransfer.dropEffect = "move";
+      }
+    });
+    button.addEventListener("drop", (event) => {
+      event.preventDefault();
+      const from = event.dataTransfer?.getData("text/plain");
+      if (from) {
+        this.callbacks.onSlotDrop(from, `craft:${index}`);
+      }
+    });
+
     if (stack) {
       const name = ITEM_DEFINITIONS[stack.item].name;
       button.title = name;
@@ -557,6 +684,27 @@ export class Hud {
     label.className = "item-count";
     label.textContent = count > 1 ? String(count) : "";
     return label;
+  }
+
+  private stackFromSlotElement(slot: HTMLButtonElement | null): ItemStack | null {
+    if (!slot || !this.stats) {
+      return null;
+    }
+
+    const ref = slot.dataset.slotRef;
+    if (ref?.startsWith("inventory:")) {
+      return this.stats.inventory.slots[Number(ref.replace("inventory:", ""))] ?? null;
+    }
+
+    if (ref?.startsWith("craft:")) {
+      return this.stats.craftingGrid[Number(ref.replace("craft:", ""))] ?? null;
+    }
+
+    if (ref === "result") {
+      return this.stats.craftingResult;
+    }
+
+    return null;
   }
 
   private renderIconRow(parent: HTMLDivElement, kind: string, value: number): void {
@@ -618,7 +766,16 @@ export class Hud {
     const recipes = stats.recipes
       .map((entry) => `${entry.recipe.id}:${entry.craftable ? 1 : 0}:${entry.unlocked ? 1 : 0}`)
       .join("|");
-    return `${this.mode}|${slots}|${cursor}|${recipes}`;
+    const crafting = stats.craftingGrid
+      .map((slot) => (slot ? `${slot.item}:${slot.count}:${slot.durability ?? ""}` : "-"))
+      .join("|");
+    const result = stats.craftingResult
+      ? `${stats.craftingResult.item}:${stats.craftingResult.count}:${stats.craftingResult.durability ?? ""}`
+      : "-";
+    const smelting = stats.smeltingRecipes
+      .map((entry) => `${entry.recipe.id}:${entry.smeltable ? 1 : 0}`)
+      .join("|");
+    return `${this.mode}|${slots}|${cursor}|${crafting}|${result}|${recipes}|${smelting}`;
   }
 
   private numberFromEvent(event: MouseEvent): number | null {
