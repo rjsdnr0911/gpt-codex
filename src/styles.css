@@ -670,6 +670,7 @@ button {
 }
 
 .item-icon {
+  position: relative;
   width: 58%;
   aspect-ratio: 1;
   display: block;
@@ -678,7 +679,108 @@ button {
     repeating-linear-gradient(45deg, rgba(0, 0, 0, 0.16) 0 3px, transparent 3px 6px),
     var(--item-color);
   border: 1px solid rgba(0, 0, 0, 0.45);
+  overflow: hidden;
   image-rendering: pixelated;
+  box-shadow:
+    inset 3px 3px 0 rgba(255, 255, 255, 0.18),
+    inset -4px -4px 0 rgba(0, 0, 0, 0.28),
+    0 2px 0 rgba(0, 0, 0, 0.42);
+}
+
+.item-icon::before,
+.item-icon::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.item-grass_block {
+  background:
+    linear-gradient(180deg, #78c85c 0 28%, #8c5a36 28% 100%),
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.14) 0 3px, transparent 3px 7px);
+}
+
+.item-grass_block::after,
+.item-dirt::after {
+  background:
+    radial-gradient(circle at 22% 66%, rgba(50, 28, 16, 0.45) 0 5%, transparent 6%),
+    radial-gradient(circle at 70% 48%, rgba(40, 24, 14, 0.35) 0 5%, transparent 6%),
+    radial-gradient(circle at 46% 78%, rgba(230, 180, 126, 0.28) 0 4%, transparent 5%);
+}
+
+.item-stone,
+.item-ore {
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.2), transparent 38%),
+    repeating-linear-gradient(135deg, rgba(0, 0, 0, 0.14) 0 4px, rgba(255, 255, 255, 0.08) 4px 7px),
+    var(--item-color);
+}
+
+.item-ore::after {
+  background:
+    radial-gradient(circle at 28% 32%, #82f1ef 0 8%, transparent 9%),
+    radial-gradient(circle at 68% 64%, #48bfc8 0 10%, transparent 11%),
+    radial-gradient(circle at 48% 48%, #d7ffff 0 4%, transparent 5%);
+}
+
+.item-log {
+  border-radius: 50%;
+  background:
+    radial-gradient(circle, #d29a58 0 22%, #8b552d 23% 38%, #b9793d 39% 56%, #70411f 57% 100%);
+}
+
+.item-log::after {
+  inset: 10% 2%;
+  border-left: 4px solid rgba(61, 34, 15, 0.42);
+  border-right: 4px solid rgba(255, 214, 145, 0.18);
+}
+
+.item-leaves {
+  background:
+    radial-gradient(circle at 25% 26%, #78c66d 0 13%, transparent 14%),
+    radial-gradient(circle at 70% 30%, #62b55c 0 16%, transparent 17%),
+    radial-gradient(circle at 48% 70%, #357d3e 0 22%, transparent 23%),
+    #4c944b;
+}
+
+.item-sand {
+  background:
+    radial-gradient(circle at 30% 38%, rgba(255, 245, 172, 0.7) 0 5%, transparent 6%),
+    radial-gradient(circle at 70% 62%, rgba(126, 103, 58, 0.38) 0 5%, transparent 6%),
+    #d4c682;
+}
+
+.item-planks {
+  background:
+    repeating-linear-gradient(90deg, #d09a58 0 8px, #a66d38 8px 10px, #c08a4c 10px 18px),
+    var(--item-color);
+}
+
+.item-planks::after {
+  background: repeating-linear-gradient(0deg, transparent 0 10px, rgba(70, 38, 16, 0.32) 10px 12px);
+}
+
+.item-crafting_table {
+  background:
+    linear-gradient(90deg, transparent 0 46%, rgba(45, 24, 10, 0.42) 46% 54%, transparent 54%),
+    linear-gradient(0deg, transparent 0 46%, rgba(45, 24, 10, 0.42) 46% 54%, transparent 54%),
+    repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.14) 0 4px, transparent 4px 8px),
+    #a46d3d;
+}
+
+.item-brick {
+  background:
+    repeating-linear-gradient(0deg, transparent 0 8px, rgba(70, 22, 18, 0.5) 8px 10px),
+    repeating-linear-gradient(90deg, #b35b54 0 13px, #74332f 13px 15px),
+    #a65049;
+}
+
+.item-water {
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.32), transparent 45%),
+    repeating-linear-gradient(-25deg, rgba(166, 232, 255, 0.32) 0 4px, transparent 4px 9px),
+    #2e9bc9;
 }
 
 .item-stick,
@@ -691,9 +793,47 @@ button {
   transform-origin: center;
 }
 
+.item-stick {
+  background: linear-gradient(90deg, #6d3f20, #d0a06a 45%, #7b4925);
+}
+
+.item-wooden_pickaxe,
+.item-stone_pickaxe {
+  overflow: visible;
+  border-radius: 2px;
+  background: linear-gradient(90deg, #70421f, #c49055 56%, #6d3f20);
+}
+
+.item-wooden_pickaxe::before,
+.item-stone_pickaxe::before {
+  inset: auto auto 48% 6%;
+  width: 82%;
+  height: 76%;
+  border-radius: 2px;
+  background: var(--item-color);
+  box-shadow:
+    14px -4px 0 -3px rgba(255, 255, 255, 0.3),
+    -10px 8px 0 -3px rgba(0, 0, 0, 0.22);
+  transform: rotate(38deg);
+}
+
 .item-apple,
 .item-bread {
   border-radius: 40% 44% 44% 42%;
+}
+
+.item-apple {
+  background:
+    radial-gradient(circle at 64% 20%, #7fd36c 0 8%, transparent 9%),
+    radial-gradient(circle at 32% 32%, #ff817a 0 18%, transparent 19%),
+    #cf3c38;
+}
+
+.item-bread {
+  background:
+    radial-gradient(ellipse at 28% 28%, rgba(255, 232, 150, 0.7) 0 16%, transparent 17%),
+    radial-gradient(ellipse at 72% 68%, rgba(128, 76, 24, 0.34) 0 18%, transparent 19%),
+    #d7a85a;
 }
 
 .item-count {

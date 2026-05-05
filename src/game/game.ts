@@ -17,6 +17,7 @@ import { blockFromItem, ITEM_DEFINITIONS, ItemId } from "./items";
 import { clamp } from "./math";
 import { Player } from "./player";
 import { canCraft, craft, RECIPES, recipeIsUnlocked } from "./recipes";
+import { HandView } from "./handView";
 import {
   SaveIndexV2,
   SaveSystem,
@@ -62,6 +63,7 @@ export class Game {
   private sunTarget!: THREE.Object3D;
   private hemisphereLight!: THREE.HemisphereLight;
   private highlight!: THREE.LineSegments;
+  private handView!: HandView;
   private selectedHit: VoxelHit | null = null;
   private animationFrame = 0;
   private elapsed = 0;
@@ -144,6 +146,8 @@ export class Game {
     this.materials = createVoxelMaterials(maxAnisotropy);
     this.setupEnvironment();
     this.setupHighlight();
+    this.scene.add(this.camera);
+    this.handView = new HandView(this.camera);
 
     this.saveIndex = await this.loadIndexWithMigration();
     this.hud.setWorlds(this.worldSummaries());
@@ -383,6 +387,12 @@ export class Game {
     }
 
     this.updateEnvironment();
+    this.handView.update(
+      delta,
+      selectedStack(this.inventory),
+      this.mode === "playing" && this.survival.state.alive,
+      this.mining?.progress ?? 0
+    );
     this.updateSave(delta);
     this.updateHud();
     this.renderer.render(this.scene, this.camera);
@@ -397,7 +407,7 @@ export class Game {
           void document.exitPointerLock();
         }
       } else if (this.mode === "inventory" || this.mode === "craftingTable") {
-        this.resumeGame();
+        this.closeOpenContainer(false);
       } else if (this.mode === "paused") {
         this.resumeGame();
       } else if (this.mode === "worldSelect" || this.mode === "createWorld") {
@@ -411,9 +421,16 @@ export class Game {
         if (document.pointerLockElement) {
           void document.exitPointerLock();
         }
-      } else if (this.mode === "inventory") {
-        this.resumeGame();
+      } else if (this.mode === "inventory" || this.mode === "craftingTable") {
+        this.closeOpenContainer(true);
       }
+    }
+  }
+
+  private closeOpenContainer(lockPointer: boolean): void {
+    this.setMode("playing");
+    if (lockPointer) {
+      this.input.requestPointerLock();
     }
   }
 
