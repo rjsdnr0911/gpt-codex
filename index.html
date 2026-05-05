@@ -11,6 +11,24 @@
   </head>
   <body>
     <div id="app"></div>
-    <script type="module" src="/src/main.ts"></script>
+    <script type="module">
+      void (async () => {
+        const isGitHubPages = location.hostname === "rjsdnr0911.github.io";
+
+        if (isGitHubPages) {
+          const stylesheet = document.createElement("link");
+          stylesheet.rel = "stylesheet";
+          stylesheet.href = "/gpt-codex/assets/index.css";
+          document.head.append(stylesheet);
+
+          const script = document.createElement("script");
+          script.type = "module";
+          script.src = "/gpt-codex/assets/main.js";
+          document.body.append(script);
+        } else {
+          await import("/src/main.ts");
+        }
+      })();
+    </script>
   </body>
 </html>
