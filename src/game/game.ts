@@ -6,6 +6,7 @@ import {
   addStack,
   clickSlot,
   createInventoryState,
+  moveSlotStack,
   normalizeInventory,
   selectedStack,
   shiftClickSlot,
@@ -131,6 +132,7 @@ export class Game {
       },
       onRespawn: () => this.respawn(),
       onInventorySlot: (index, button, shift) => this.handleInventoryClick(index, button, shift),
+      onInventoryDrop: (fromIndex, toIndex) => this.handleInventoryDrop(fromIndex, toIndex),
       onHotbarKeySwap: (index, hotbarSlot) => this.handleHotbarSwap(index, hotbarSlot),
       onCraftRecipe: (recipeId, craftAll, gridSize) => this.handleCraft(recipeId, craftAll, gridSize),
       onResetAll: () => {
@@ -424,7 +426,8 @@ export class Game {
       this.input.isDown("KeyA") ||
       this.input.isDown("KeyS") ||
       this.input.isDown("KeyD");
-    const wantsSprint = this.input.isDown("ControlLeft") || this.input.isDown("ControlRight");
+    const wantsSprint =
+      this.input.isDown("ControlLeft") || this.input.isDown("ControlRight") || this.input.isDown("KeyR");
     const sneaking = this.input.isDown("ShiftLeft") || this.input.isDown("ShiftRight");
 
     this.player.update(delta, this.input, this.world, this.survival.canSprint(), sneaking);
@@ -593,6 +596,12 @@ export class Game {
     } else {
       clickSlot(this.inventory, index, button);
     }
+    this.unlockRecipesFromInventory();
+    this.queueSave();
+  }
+
+  private handleInventoryDrop(fromIndex: number, toIndex: number): void {
+    moveSlotStack(this.inventory, fromIndex, toIndex);
     this.unlockRecipesFromInventory();
     this.queueSave();
   }

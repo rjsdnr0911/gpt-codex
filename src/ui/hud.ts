@@ -39,6 +39,7 @@ export interface HudCallbacks {
   onQuitToTitle: () => void;
   onRespawn: () => void;
   onInventorySlot: (index: number, button: 0 | 2, shift: boolean) => void;
+  onInventoryDrop: (fromIndex: number, toIndex: number) => void;
   onHotbarKeySwap: (index: number, hotbarSlot: number) => void;
   onCraftRecipe: (recipeId: string, craftAll: boolean, gridSize: 2 | 3) => void;
   onResetAll: () => void;
@@ -80,6 +81,7 @@ export class Hud {
   private mode: HudMode = "title";
   private worlds: WorldSummary[] = [];
   private stats: HudStats | null = null;
+  private panelSignature = "";
   private toastTimer = 0;
 
   constructor(parent: HTMLElement, callbacks: HudCallbacks) {
@@ -150,6 +152,7 @@ export class Hud {
 
   setMode(mode: HudMode): void {
     this.mode = mode;
+    this.panelSignature = "";
     this.render();
   }
 
@@ -163,6 +166,11 @@ export class Hud {
     this.renderHud();
 
     if (this.mode === "inventory" || this.mode === "craftingTable") {
+      const signature = this.makePanelSignature(stats);
+      if (signature === this.panelSignature) {
+        return;
+      }
+      this.panelSignature = signature;
       this.renderPanel();
     }
   }
@@ -371,6 +379,10 @@ export class Hud {
 
     const panel = document.createElement("div");
     panel.className = `inventory-panel grid-${gridSize}`;
+    panel.addEventListener("mousemove", (event) => {
+      panel.style.setProperty("--cursor-x", `${event.clientX}px`);
+      panel.style.setProperty("--cursor-y", `${event.clientY}px`);
+    });
 
     const title = document.createElement("div");
     title.className = "inventory-title";
@@ -461,6 +473,7 @@ export class Hud {
     button.className = "inventory-slot";
     button.type = "button";
     button.dataset.slot = String(index);
+    button.draggable = Boolean(stats?.inventory.slots[index]);
     button.addEventListener("click", (event) => {
       const hotbar = this.numberFromEvent(event as MouseEvent);
       if (hotbar !== null) {
@@ -472,6 +485,33 @@ export class Hud {
     button.addEventListener("contextmenu", (event) => {
       event.preventDefault();
       this.callbacks.onInventorySlot(index, 2, event.shiftKey);
+    });
+    button.addEventListener("dragstart", (event) => {
+      const stack = this.stats?.inventory.slots[index] ?? null;
+      if (!stack || !event.dataTransfer) {
+        event.preventDefault();
+        return;
+      }
+
+      event.dataTransfer.effectAllowed = "move";
+      event.dataTransfer.setData("text/plain", String(index));
+      button.classList.add("dragging");
+    });
+    button.addEventListener("dragend", () => {
+      button.classList.remove("dragging");
+    });
+    button.addEventListener("dragover", (event) => {
+      event.preventDefault();
+      if (event.dataTransfer) {
+        event.dataTransfer.dropEffect = "move";
+      }
+    });
+    button.addEventListener("drop", (event) => {
+      event.preventDefault();
+      const from = Number(event.dataTransfer?.getData("text/plain"));
+      if (Number.isInteger(from)) {
+        this.callbacks.onInventoryDrop(from, index);
+      }
     });
 
     const stack = stats?.inventory.slots[index] ?? null;
@@ -544,6 +584,19 @@ export class Hud {
     value.textContent = valueText;
     row.append(label, value);
     return row;
+  }
+
+  private makePanelSignature(stats: HudStats): string {
+    const slots = stats.inventory.slots
+      .map((slot) => (slot ? `${slot.item}:${slot.count}:${slot.durability ?? ""}` : "-"))
+      .join("|");
+    const cursor = stats.inventory.cursor
+      ? `${stats.inventory.cursor.item}:${stats.inventory.cursor.count}:${stats.inventory.cursor.durability ?? ""}`
+      : "-";
+    const recipes = stats.recipes
+      .map((entry) => `${entry.recipe.id}:${entry.craftable ? 1 : 0}:${entry.unlocked ? 1 : 0}`)
+      .join("|");
+    return `${this.mode}|${slots}|${cursor}|${recipes}`;
   }
 
   private numberFromEvent(event: MouseEvent): number | null {

@@ -819,6 +819,15 @@ button {
   height: 42px;
   display: grid;
   place-items: center;
+  cursor: grab;
+}
+
+.inventory-slot:active {
+  cursor: grabbing;
+}
+
+.inventory-slot.dragging {
+  opacity: 0.42;
 }
 
 .ghost-cell {
@@ -843,14 +852,16 @@ button {
 }
 
 .cursor-stack {
-  position: absolute;
-  right: 18px;
-  top: 18px;
+  position: fixed;
+  left: var(--cursor-x, -100px);
+  top: var(--cursor-y, -100px);
   width: 48px;
   height: 48px;
   display: grid;
   place-items: center;
   pointer-events: none;
+  transform: translate(10px, 10px);
+  z-index: 4;
 }
 
 @media (max-width: 760px) {

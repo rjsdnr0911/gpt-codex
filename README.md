@@ -28,4 +28,5 @@ npm run build
 - `Esc`: Pause/close menu
 - `1-9`: Hotbar
 - `Ctrl`: Sprint
+- `R`: Sprint fallback for browsers
 - `Shift`: Sneak

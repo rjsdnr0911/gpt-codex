@@ -4,6 +4,7 @@ import {
   addStack,
   clickSlot,
   createInventoryState,
+  moveSlotStack,
   shiftClickSlot
 } from "./inventory";
 
@@ -37,5 +38,16 @@ describe("inventory", () => {
 
     expect(inventory.slots[0]).toBeNull();
     expect(inventory.slots[HOTBAR_START]).toEqual({ item: "stone", count: 12 });
+  });
+
+  it("drag-moving merges compatible stacks", () => {
+    const inventory = createInventoryState();
+    inventory.slots[0] = { item: "log", count: 10 };
+    inventory.slots[1] = { item: "log", count: 60 };
+
+    moveSlotStack(inventory, 0, 1);
+
+    expect(inventory.slots[0]).toEqual({ item: "log", count: 6 });
+    expect(inventory.slots[1]).toEqual({ item: "log", count: 64 });
   });
 });

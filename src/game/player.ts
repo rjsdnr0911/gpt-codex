@@ -75,7 +75,7 @@ export class Player {
     }
 
     const inWater = this.isInWater(world);
-    const wantsSprint = input.isDown("ControlLeft") || input.isDown("ControlRight");
+    const wantsSprint = input.isDown("ControlLeft") || input.isDown("ControlRight") || input.isDown("KeyR");
     const speed = wantsSprint && canSprint && !inWater ? 7.1 : sneaking ? 2.1 : 4.6;
     this.velocity.x = wish.x * (inWater ? speed * 0.48 : speed);
     this.velocity.z = wish.z * (inWater ? speed * 0.48 : speed);

@@ -99,6 +99,15 @@ export class InputController {
   }
 
   private readonly handleKeyDown = (event: KeyboardEvent): void => {
+    if (this.shouldCaptureKeyboard(event)) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+
+    if (this.isEditableTarget(event.target)) {
+      return;
+    }
+
     if (!this.keys.has(event.code)) {
       this.pressed.add(event.code);
     }
@@ -114,6 +123,15 @@ export class InputController {
   };
 
   private readonly handleKeyUp = (event: KeyboardEvent): void => {
+    if (this.shouldCaptureKeyboard(event)) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+
+    if (this.isEditableTarget(event.target)) {
+      return;
+    }
+
     this.keys.delete(event.code);
   };
 
@@ -177,5 +195,51 @@ export class InputController {
   private setSelectedSlot(slot: number): void {
     this.selectedSlot = slot;
     this.onSelectedSlotChange?.(slot);
+  }
+
+  private shouldCaptureKeyboard(event: KeyboardEvent): boolean {
+    if (this.isEditableTarget(event.target)) {
+      return false;
+    }
+
+    const gameCodes = new Set([
+      "KeyW",
+      "KeyA",
+      "KeyS",
+      "KeyD",
+      "Space",
+      "ShiftLeft",
+      "ShiftRight",
+      "ControlLeft",
+      "ControlRight",
+      "KeyR",
+      "KeyE",
+      "Escape",
+      "Tab",
+      "Digit1",
+      "Digit2",
+      "Digit3",
+      "Digit4",
+      "Digit5",
+      "Digit6",
+      "Digit7",
+      "Digit8",
+      "Digit9"
+    ]);
+
+    return this.pointerLocked || gameCodes.has(event.code) || event.ctrlKey || event.metaKey;
+  }
+
+  private isEditableTarget(target: EventTarget | null): boolean {
+    if (!(target instanceof HTMLElement)) {
+      return false;
+    }
+
+    return (
+      target instanceof HTMLInputElement ||
+      target instanceof HTMLTextAreaElement ||
+      target.isContentEditable ||
+      target instanceof HTMLSelectElement
+    );
   }
 }

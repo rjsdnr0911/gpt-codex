@@ -213,3 +213,37 @@ export function swapWithHotbar(state: InventoryState, index: number, hotbarSlot:
   state.slots[hotbarIndex] = state.slots[index];
   state.slots[index] = temp;
 }
+
+export function moveSlotStack(state: InventoryState, fromIndex: number, toIndex: number): void {
+  if (fromIndex === toIndex) {
+    return;
+  }
+
+  const source = state.slots[fromIndex];
+  if (!source) {
+    return;
+  }
+
+  const target = state.slots[toIndex];
+
+  if (!target) {
+    state.slots[toIndex] = source;
+    state.slots[fromIndex] = null;
+    return;
+  }
+
+  if (stacksMatch(source, target)) {
+    const max = maxStackFor(target.item);
+    const move = Math.min(max - target.count, source.count);
+    target.count += move;
+    source.count -= move;
+
+    if (source.count <= 0) {
+      state.slots[fromIndex] = null;
+    }
+    return;
+  }
+
+  state.slots[fromIndex] = target;
+  state.slots[toIndex] = source;
+}
