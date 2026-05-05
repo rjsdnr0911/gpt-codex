@@ -379,9 +379,28 @@ export class Hud {
 
     const panel = document.createElement("div");
     panel.className = `inventory-panel grid-${gridSize}`;
+    const tooltip = document.createElement("div");
+    tooltip.className = "inventory-tooltip";
+    tooltip.hidden = true;
     panel.addEventListener("mousemove", (event) => {
       panel.style.setProperty("--cursor-x", `${event.clientX}px`);
       panel.style.setProperty("--cursor-y", `${event.clientY}px`);
+
+      const slot = (event.target as HTMLElement).closest<HTMLButtonElement>(".inventory-slot");
+      const slotIndex = Number(slot?.dataset.slot);
+      const stack = Number.isInteger(slotIndex) ? stats.inventory.slots[slotIndex] : null;
+      if (!stack) {
+        tooltip.hidden = true;
+        return;
+      }
+
+      tooltip.textContent = ITEM_DEFINITIONS[stack.item].name;
+      tooltip.style.setProperty("--tooltip-x", `${event.clientX}px`);
+      tooltip.style.setProperty("--tooltip-y", `${event.clientY}px`);
+      tooltip.hidden = false;
+    });
+    panel.addEventListener("mouseleave", () => {
+      tooltip.hidden = true;
     });
 
     const title = document.createElement("div");
@@ -438,7 +457,7 @@ export class Hud {
       cursor.append(this.makeItemIcon(stats.inventory.cursor), this.makeCount(stats.inventory.cursor.count));
     }
 
-    panel.append(title, recipeBook, playerPaper, craftGrid, storage, hotbar, cursor);
+    panel.append(title, recipeBook, playerPaper, craftGrid, storage, hotbar, cursor, tooltip);
     return panel;
   }
 
@@ -516,6 +535,9 @@ export class Hud {
 
     const stack = stats?.inventory.slots[index] ?? null;
     if (stack) {
+      const name = ITEM_DEFINITIONS[stack.item].name;
+      button.title = name;
+      button.setAttribute("aria-label", name);
       button.append(this.makeItemIcon(stack), this.makeCount(stack.count));
     }
 

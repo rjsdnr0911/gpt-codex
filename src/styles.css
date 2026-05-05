@@ -864,6 +864,37 @@ button {
   z-index: 4;
 }
 
+.inventory-tooltip {
+  position: fixed;
+  left: var(--tooltip-x, -100px);
+  top: var(--tooltip-y, -100px);
+  max-width: min(260px, calc(100vw - 24px));
+  padding: 7px 10px;
+  border: 2px solid #171717;
+  background:
+    linear-gradient(180deg, rgba(52, 34, 78, 0.96), rgba(22, 15, 35, 0.96)),
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.08) 0 2px, transparent 2px 5px);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 900;
+  line-height: 1.1;
+  text-shadow: 2px 2px 0 #000;
+  pointer-events: none;
+  transform: translate(14px, -110%);
+  z-index: 8;
+  box-shadow:
+    inset 2px 2px 0 rgba(255, 255, 255, 0.18),
+    inset -2px -2px 0 rgba(0, 0, 0, 0.42),
+    0 8px 24px rgba(0, 0, 0, 0.36);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.inventory-tooltip[hidden] {
+  display: none;
+}
+
 @media (max-width: 760px) {
   .menu-layer,
   .panel-layer {

@@ -9,15 +9,27 @@ import {
 } from "./inventory";
 
 describe("inventory", () => {
-  it("merges stacks before using empty slots", () => {
+  it("adds new pickups to the hotbar before storage", () => {
     const inventory = createInventoryState();
-    inventory.slots[0] = { item: "log", count: 63 };
 
     const leftover = addStack(inventory, { item: "log", count: 3 });
 
     expect(leftover).toBeNull();
+    expect(inventory.slots[HOTBAR_START]).toEqual({ item: "log", count: 3 });
+    expect(inventory.slots[0]).toBeNull();
+  });
+
+  it("fills hotbar stacks before storage stacks when picking up matching items", () => {
+    const inventory = createInventoryState();
+    inventory.slots[0] = { item: "log", count: 63 };
+    inventory.slots[HOTBAR_START] = { item: "log", count: 62 };
+
+    const leftover = addStack(inventory, { item: "log", count: 4 });
+
+    expect(leftover).toBeNull();
+    expect(inventory.slots[HOTBAR_START]).toEqual({ item: "log", count: 64 });
     expect(inventory.slots[0]).toEqual({ item: "log", count: 64 });
-    expect(inventory.slots[1]).toEqual({ item: "log", count: 2 });
+    expect(inventory.slots[HOTBAR_START + 1]).toEqual({ item: "log", count: 1 });
   });
 
   it("splits a slot with right click", () => {

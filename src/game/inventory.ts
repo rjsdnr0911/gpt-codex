@@ -33,33 +33,41 @@ export function selectedStack(state: InventoryState): ItemStack | null {
 
 export function addStack(state: InventoryState, incoming: ItemStack): ItemStack | null {
   let remaining: ItemStack = { ...incoming };
+  const hotbarRange = [HOTBAR_START, INVENTORY_SIZE] as const;
+  const storageRange = [0, HOTBAR_START] as const;
+  const ranges = [hotbarRange, storageRange];
 
-  for (const slot of state.slots) {
-    if (!slot || !stacksMatch(slot, remaining)) {
-      continue;
-    }
+  for (const [start, end] of ranges) {
+    for (let index = start; index < end; index += 1) {
+      const slot = state.slots[index];
+      if (!slot || !stacksMatch(slot, remaining)) {
+        continue;
+      }
 
-    const max = maxStackFor(slot.item);
-    const move = Math.min(max - slot.count, remaining.count);
-    slot.count += move;
-    remaining.count -= move;
+      const max = maxStackFor(slot.item);
+      const move = Math.min(max - slot.count, remaining.count);
+      slot.count += move;
+      remaining.count -= move;
 
-    if (remaining.count <= 0) {
-      return null;
+      if (remaining.count <= 0) {
+        return null;
+      }
     }
   }
 
-  for (let index = 0; index < state.slots.length; index += 1) {
-    if (state.slots[index]) {
-      continue;
-    }
+  for (const [start, end] of ranges) {
+    for (let index = start; index < end; index += 1) {
+      if (state.slots[index]) {
+        continue;
+      }
 
-    const move = Math.min(maxStackFor(remaining.item), remaining.count);
-    state.slots[index] = { ...remaining, count: move };
-    remaining.count -= move;
+      const move = Math.min(maxStackFor(remaining.item), remaining.count);
+      state.slots[index] = { ...remaining, count: move };
+      remaining.count -= move;
 
-    if (remaining.count <= 0) {
-      return null;
+      if (remaining.count <= 0) {
+        return null;
+      }
     }
   }
 
