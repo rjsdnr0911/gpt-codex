@@ -17,7 +17,7 @@ export interface Recipe {
 export const RECIPES: Recipe[] = [
   {
     id: "planks",
-    name: "Planks",
+    name: "나무 판자",
     size: 2,
     type: "shapeless",
     ingredients: { log: 1 },
@@ -27,7 +27,7 @@ export const RECIPES: Recipe[] = [
   },
   {
     id: "sticks",
-    name: "Sticks",
+    name: "막대기",
     size: 2,
     type: "shaped",
     pattern: ["P", "P"],
@@ -38,7 +38,7 @@ export const RECIPES: Recipe[] = [
   },
   {
     id: "crafting_table",
-    name: "Crafting Table",
+    name: "제작대",
     size: 2,
     type: "shaped",
     pattern: ["PP", "PP"],
@@ -49,7 +49,7 @@ export const RECIPES: Recipe[] = [
   },
   {
     id: "wooden_pickaxe",
-    name: "Wooden Pickaxe",
+    name: "나무 곡괭이",
     size: 3,
     type: "shaped",
     pattern: ["PPP", " S ", " S "],
@@ -60,7 +60,7 @@ export const RECIPES: Recipe[] = [
   },
   {
     id: "wooden_axe",
-    name: "Wooden Axe",
+    name: "나무 도끼",
     size: 3,
     type: "shaped",
     pattern: ["PP", "PS", " S"],
@@ -71,7 +71,7 @@ export const RECIPES: Recipe[] = [
   },
   {
     id: "wooden_shovel",
-    name: "Wooden Shovel",
+    name: "나무 삽",
     size: 2,
     type: "shaped",
     pattern: ["P", "S"],
@@ -82,7 +82,7 @@ export const RECIPES: Recipe[] = [
   },
   {
     id: "stone_pickaxe",
-    name: "Stone Pickaxe",
+    name: "돌 곡괭이",
     size: 3,
     type: "shaped",
     pattern: ["CCC", " S ", " S "],
@@ -93,7 +93,7 @@ export const RECIPES: Recipe[] = [
   },
   {
     id: "stone_axe",
-    name: "Stone Axe",
+    name: "돌 도끼",
     size: 3,
     type: "shaped",
     pattern: ["CC", "CS", " S"],
@@ -104,7 +104,7 @@ export const RECIPES: Recipe[] = [
   },
   {
     id: "stone_shovel",
-    name: "Stone Shovel",
+    name: "돌 삽",
     size: 2,
     type: "shaped",
     pattern: ["C", "S"],
@@ -115,7 +115,7 @@ export const RECIPES: Recipe[] = [
   },
   {
     id: "iron_pickaxe",
-    name: "Iron Pickaxe",
+    name: "철 곡괭이",
     size: 3,
     type: "shaped",
     pattern: ["III", " S ", " S "],
@@ -126,7 +126,7 @@ export const RECIPES: Recipe[] = [
   },
   {
     id: "diamond_pickaxe",
-    name: "Diamond Pickaxe",
+    name: "다이아몬드 곡괭이",
     size: 3,
     type: "shaped",
     pattern: ["DDD", " S ", " S "],
@@ -137,7 +137,7 @@ export const RECIPES: Recipe[] = [
   },
   {
     id: "torch",
-    name: "Torch",
+    name: "횃불",
     size: 2,
     type: "shaped",
     pattern: ["C", "S"],
@@ -148,7 +148,7 @@ export const RECIPES: Recipe[] = [
   },
   {
     id: "furnace",
-    name: "Furnace",
+    name: "화로",
     size: 3,
     type: "shaped",
     pattern: ["SSS", "S S", "SSS"],
@@ -159,7 +159,7 @@ export const RECIPES: Recipe[] = [
   },
   {
     id: "chest",
-    name: "Chest",
+    name: "상자",
     size: 3,
     type: "shaped",
     pattern: ["PPP", "P P", "PPP"],
@@ -170,7 +170,7 @@ export const RECIPES: Recipe[] = [
   },
   {
     id: "brick_block",
-    name: "Brick Block",
+    name: "벽돌 블록",
     size: 2,
     type: "shaped",
     pattern: ["OO", "OO"],
@@ -181,7 +181,7 @@ export const RECIPES: Recipe[] = [
   },
   {
     id: "bread",
-    name: "Trail Bread",
+    name: "빵",
     size: 3,
     type: "shapeless",
     ingredients: { planks: 1, apple: 1 },

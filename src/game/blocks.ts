@@ -113,7 +113,7 @@ const allFaces = (tile: TileId): Record<FaceName, TileId> => ({
 export const BLOCKS: Record<BlockType, BlockDefinition> = {
   [BlockType.Air]: {
     id: "air",
-    displayName: "Air",
+    displayName: "공기",
     solid: false,
     transparent: true,
     fluid: false,
@@ -124,7 +124,7 @@ export const BLOCKS: Record<BlockType, BlockDefinition> = {
   },
   [BlockType.Grass]: {
     id: "grass",
-    displayName: "Grass",
+    displayName: "잔디",
     solid: true,
     transparent: false,
     fluid: false,
@@ -144,7 +144,7 @@ export const BLOCKS: Record<BlockType, BlockDefinition> = {
   },
   [BlockType.Dirt]: {
     id: "dirt",
-    displayName: "Dirt",
+    displayName: "흙",
     solid: true,
     transparent: false,
     fluid: false,
@@ -157,7 +157,7 @@ export const BLOCKS: Record<BlockType, BlockDefinition> = {
   },
   [BlockType.Stone]: {
     id: "stone",
-    displayName: "Stone",
+    displayName: "돌",
     solid: true,
     transparent: false,
     fluid: false,
@@ -171,7 +171,7 @@ export const BLOCKS: Record<BlockType, BlockDefinition> = {
   },
   [BlockType.Sand]: {
     id: "sand",
-    displayName: "Sand",
+    displayName: "모래",
     solid: true,
     transparent: false,
     fluid: false,
@@ -184,7 +184,7 @@ export const BLOCKS: Record<BlockType, BlockDefinition> = {
   },
   [BlockType.Water]: {
     id: "water",
-    displayName: "Water",
+    displayName: "물",
     solid: false,
     transparent: true,
     fluid: true,
@@ -196,7 +196,7 @@ export const BLOCKS: Record<BlockType, BlockDefinition> = {
   },
   [BlockType.Log]: {
     id: "log",
-    displayName: "Log",
+    displayName: "원목",
     solid: true,
     transparent: false,
     fluid: false,
@@ -216,7 +216,7 @@ export const BLOCKS: Record<BlockType, BlockDefinition> = {
   },
   [BlockType.Leaves]: {
     id: "leaves",
-    displayName: "Leaves",
+    displayName: "나뭇잎",
     solid: true,
     transparent: false,
     fluid: false,
@@ -228,7 +228,7 @@ export const BLOCKS: Record<BlockType, BlockDefinition> = {
   },
   [BlockType.Ore]: {
     id: "ore",
-    displayName: "Ore",
+    displayName: "구형 광석",
     solid: true,
     transparent: false,
     fluid: false,
@@ -242,7 +242,7 @@ export const BLOCKS: Record<BlockType, BlockDefinition> = {
   },
   [BlockType.Brick]: {
     id: "brick",
-    displayName: "Brick",
+    displayName: "벽돌 블록",
     solid: true,
     transparent: false,
     fluid: false,
@@ -255,7 +255,7 @@ export const BLOCKS: Record<BlockType, BlockDefinition> = {
   },
   [BlockType.Planks]: {
     id: "planks",
-    displayName: "Planks",
+    displayName: "나무 판자",
     solid: true,
     transparent: false,
     fluid: false,
@@ -268,7 +268,7 @@ export const BLOCKS: Record<BlockType, BlockDefinition> = {
   },
   [BlockType.CraftingTable]: {
     id: "crafting_table",
-    displayName: "Crafting Table",
+    displayName: "제작대",
     solid: true,
     transparent: false,
     fluid: false,
@@ -289,7 +289,7 @@ export const BLOCKS: Record<BlockType, BlockDefinition> = {
   },
   [BlockType.CoalOre]: {
     id: "coal_ore",
-    displayName: "Coal Ore",
+    displayName: "석탄 광석",
     solid: true,
     transparent: false,
     fluid: false,
@@ -304,7 +304,7 @@ export const BLOCKS: Record<BlockType, BlockDefinition> = {
   },
   [BlockType.CopperOre]: {
     id: "copper_ore",
-    displayName: "Copper Ore",
+    displayName: "구리 광석",
     solid: true,
     transparent: false,
     fluid: false,
@@ -319,7 +319,7 @@ export const BLOCKS: Record<BlockType, BlockDefinition> = {
   },
   [BlockType.IronOre]: {
     id: "iron_ore",
-    displayName: "Iron Ore",
+    displayName: "철 광석",
     solid: true,
     transparent: false,
     fluid: false,
@@ -334,7 +334,7 @@ export const BLOCKS: Record<BlockType, BlockDefinition> = {
   },
   [BlockType.GoldOre]: {
     id: "gold_ore",
-    displayName: "Gold Ore",
+    displayName: "금 광석",
     solid: true,
     transparent: false,
     fluid: false,
@@ -349,7 +349,7 @@ export const BLOCKS: Record<BlockType, BlockDefinition> = {
   },
   [BlockType.RedstoneOre]: {
     id: "redstone_ore",
-    displayName: "Redstone Ore",
+    displayName: "레드스톤 광석",
     solid: true,
     transparent: false,
     fluid: false,
@@ -364,7 +364,7 @@ export const BLOCKS: Record<BlockType, BlockDefinition> = {
   },
   [BlockType.LapisOre]: {
     id: "lapis_ore",
-    displayName: "Lapis Ore",
+    displayName: "청금석 광석",
     solid: true,
     transparent: false,
     fluid: false,
@@ -379,7 +379,7 @@ export const BLOCKS: Record<BlockType, BlockDefinition> = {
   },
   [BlockType.DiamondOre]: {
     id: "diamond_ore",
-    displayName: "Diamond Ore",
+    displayName: "다이아몬드 광석",
     solid: true,
     transparent: false,
     fluid: false,
@@ -394,7 +394,7 @@ export const BLOCKS: Record<BlockType, BlockDefinition> = {
   },
   [BlockType.EmeraldOre]: {
     id: "emerald_ore",
-    displayName: "Emerald Ore",
+    displayName: "에메랄드 광석",
     solid: true,
     transparent: false,
     fluid: false,
@@ -409,7 +409,7 @@ export const BLOCKS: Record<BlockType, BlockDefinition> = {
   },
   [BlockType.Furnace]: {
     id: "furnace",
-    displayName: "Furnace",
+    displayName: "화로",
     solid: true,
     transparent: false,
     fluid: false,
@@ -432,7 +432,7 @@ export const BLOCKS: Record<BlockType, BlockDefinition> = {
   },
   [BlockType.Chest]: {
     id: "chest",
-    displayName: "Chest",
+    displayName: "상자",
     solid: true,
     transparent: false,
     fluid: false,
@@ -446,7 +446,7 @@ export const BLOCKS: Record<BlockType, BlockDefinition> = {
   },
   [BlockType.Torch]: {
     id: "torch",
-    displayName: "Torch",
+    displayName: "횃불",
     solid: false,
     transparent: true,
     fluid: false,

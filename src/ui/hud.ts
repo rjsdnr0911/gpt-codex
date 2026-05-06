@@ -1,6 +1,6 @@
 import { BLOCKS, BlockType } from "../game/blocks";
 import { HOTBAR_START, InventoryState } from "../game/inventory";
-import { ITEM_DEFINITIONS, ItemId, ItemStack } from "../game/items";
+import { ITEM_DEFINITIONS, ItemId, ItemStack, ToolKind, ToolTier } from "../game/items";
 import { Recipe } from "../game/recipes";
 import { SmeltingRecipe } from "../game/smelting";
 import { SurvivalState } from "../game/survival";
@@ -54,6 +54,7 @@ export interface HudCallbacks {
 export interface HudStats {
   position: string;
   chunks: number;
+  mobs: number;
   fps: number;
   selectedStack: ItemStack | null;
   inventory: InventoryState;
@@ -112,7 +113,7 @@ export class Hud {
 
     const title = document.createElement("div");
     title.className = "brand-title pixel-title-small";
-    title.textContent = "Voxel Frontier";
+    title.textContent = "Codex Craft";
 
     this.statusLine = document.createElement("div");
     this.statusLine.className = "status-line";
@@ -212,10 +213,11 @@ export class Hud {
     this.statusLine.textContent = this.stats.position;
     this.debugChip.innerHTML = "";
     this.debugChip.append(
-      this.makeMetric("World", this.stats.activeWorldName),
+      this.makeMetric("월드", this.stats.activeWorldName),
       this.makeMetric("FPS", String(this.stats.fps)),
-      this.makeMetric("Chunks", String(this.stats.chunks)),
-      this.makeMetric("Save", this.stats.saveState)
+      this.makeMetric("청크", String(this.stats.chunks)),
+      this.makeMetric("몹", String(this.stats.mobs)),
+      this.makeMetric("저장", this.stats.saveState)
     );
 
     this.itemName.textContent = selected ? ITEM_DEFINITIONS[selected.item].name : "";
@@ -262,7 +264,7 @@ export class Hud {
     }
 
     if (this.mode === "loading") {
-      this.menuLayer.append(this.makeMenuPanel("Loading terrain", "Building chunks and warming the sky.", []));
+      this.menuLayer.append(this.makeMenuPanel("지형 불러오는 중", "청크를 만들고 하늘을 준비하고 있습니다.", []));
     }
   }
 
@@ -282,23 +284,23 @@ export class Hud {
 
   private makeTitleMenu(): HTMLElement {
     const actions = [
-      this.makeMenuButton("Singleplayer", this.callbacks.onSingleplayer),
-      this.makeMenuButton("Create New World", this.callbacks.onCreateWorldMenu),
-      this.makeMenuButton("Options", () => this.showToast("Options are folded into this survival build.")),
-      this.makeMenuButton("Quit to Title", () => this.showToast("Singleplayer build is already local."))
+      this.makeMenuButton("싱글플레이", this.callbacks.onSingleplayer),
+      this.makeMenuButton("새 월드 만들기", this.callbacks.onCreateWorldMenu),
+      this.makeMenuButton("설정", () => this.showToast("설정은 현재 생존 빌드에 통합되어 있습니다.")),
+      this.makeMenuButton("타이틀로 돌아가기", () => this.showToast("이 빌드는 로컬 싱글플레이 전용입니다."))
     ];
-    return this.makeMenuPanel("Voxel Frontier", "Java survival style, handmade for this world.", actions, true);
+    return this.makeMenuPanel("Codex Craft", "블록을 캐고, 만들고, 밤을 버티는 로컬 생존 샌드박스.", actions, true);
   }
 
   private makeWorldSelect(): HTMLElement {
-    const panel = this.makeMenuPanel("Select World", "Choose a local singleplayer save.", [], false);
+    const panel = this.makeMenuPanel("월드 선택", "로컬 싱글플레이 저장을 선택하세요.", [], false);
     const list = document.createElement("div");
     list.className = "world-list";
 
     if (this.worlds.length === 0) {
       const empty = document.createElement("div");
       empty.className = "empty-worlds";
-      empty.textContent = "No worlds yet.";
+      empty.textContent = "아직 만든 월드가 없습니다.";
       list.append(empty);
     }
 
@@ -320,14 +322,14 @@ export class Hud {
       const del = document.createElement("button");
       del.className = "menu-button danger mini";
       del.type = "button";
-      del.textContent = "Delete";
+      del.textContent = "삭제";
       del.addEventListener("click", () => this.callbacks.onDeleteWorld(world.id));
 
       row.append(main, del);
       const regen = document.createElement("button");
       regen.className = "menu-button mini";
       regen.type = "button";
-      regen.textContent = "Regenerate Caves Copy";
+      regen.textContent = "동굴 월드 복사 재생성";
       regen.addEventListener("click", () => this.callbacks.onRegenerateWorld(world.id));
       row.append(regen);
       list.append(row);
@@ -336,15 +338,15 @@ export class Hud {
     const actions = document.createElement("div");
     actions.className = "menu-actions";
     actions.append(
-      this.makeMenuButton("Create New World", this.callbacks.onCreateWorldMenu),
-      this.makeMenuButton("Back", this.callbacks.onBackToTitle)
+      this.makeMenuButton("새 월드 만들기", this.callbacks.onCreateWorldMenu),
+      this.makeMenuButton("뒤로", this.callbacks.onBackToTitle)
     );
     panel.append(list, actions);
     return panel;
   }
 
   private makeCreateWorld(): HTMLElement {
-    const panel = this.makeMenuPanel("Create New World", "Survival | Normal | Local save", [], false);
+    const panel = this.makeMenuPanel("새 월드 만들기", "생존 | 보통 | 로컬 저장", [], false);
     const form = document.createElement("form");
     form.className = "create-form";
 
@@ -352,42 +354,42 @@ export class Hud {
     name.className = "pixel-input";
     name.name = "worldName";
     name.maxLength = 28;
-    name.placeholder = "World Name";
-    name.value = `New World ${this.worlds.length + 1}`;
+    name.placeholder = "월드 이름";
+    name.value = `새 월드 ${this.worlds.length + 1}`;
 
     const seed = document.createElement("input");
     seed.className = "pixel-input";
     seed.name = "seed";
     seed.maxLength = 36;
-    seed.placeholder = "Seed";
-    seed.value = `frontier-${Math.floor(Date.now() / 1000).toString(36)}`;
+    seed.placeholder = "시드";
+    seed.value = `codex-${Math.floor(Date.now() / 1000).toString(36)}`;
 
     const actions = document.createElement("div");
     actions.className = "menu-actions";
-    const create = this.makeMenuButton("Create", () => undefined);
+    const create = this.makeMenuButton("생성", () => undefined);
     create.type = "submit";
-    actions.append(create, this.makeMenuButton("Cancel", this.callbacks.onBackToTitle));
+    actions.append(create, this.makeMenuButton("취소", this.callbacks.onBackToTitle));
     form.append(name, seed, actions);
     form.addEventListener("submit", (event) => {
       event.preventDefault();
-      this.callbacks.onCreateWorld(name.value.trim() || "New World", seed.value.trim() || "frontier-aurora");
+      this.callbacks.onCreateWorld(name.value.trim() || "새 월드", seed.value.trim() || "codex-aurora");
     });
     panel.append(form);
     return panel;
   }
 
   private makePauseMenu(): HTMLElement {
-    return this.makeMenuPanel("Game Menu", "World paused.", [
-      this.makeMenuButton("Back to Game", this.callbacks.onResume),
-      this.makeMenuButton("Save and Quit to Title", this.callbacks.onQuitToTitle),
-      this.makeMenuButton("Reset All Local Worlds", this.callbacks.onResetAll, "danger")
+    return this.makeMenuPanel("게임 메뉴", "월드가 일시정지되었습니다.", [
+      this.makeMenuButton("게임으로 돌아가기", this.callbacks.onResume),
+      this.makeMenuButton("저장하고 타이틀로", this.callbacks.onQuitToTitle),
+      this.makeMenuButton("모든 로컬 월드 초기화", this.callbacks.onResetAll, "danger")
     ]);
   }
 
   private makeGameOver(): HTMLElement {
-    return this.makeMenuPanel("You Died", "Respawn at your world spawn point.", [
-      this.makeMenuButton("Respawn", this.callbacks.onRespawn),
-      this.makeMenuButton("Title Screen", this.callbacks.onQuitToTitle)
+    return this.makeMenuPanel("사망했습니다", "월드 스폰 지점에서 다시 시작합니다.", [
+      this.makeMenuButton("리스폰", this.callbacks.onRespawn),
+      this.makeMenuButton("타이틀 화면", this.callbacks.onQuitToTitle)
     ], true);
   }
 
@@ -426,14 +428,14 @@ export class Hud {
 
     const title = document.createElement("div");
     title.className = "inventory-title";
-    title.textContent = gridSize === 3 ? "Crafting Table" : "Inventory";
+    title.textContent = gridSize === 3 ? "제작대" : "인벤토리";
 
     const recipeBook = document.createElement("div");
     recipeBook.className = "recipe-book";
 
     const recipeTitle = document.createElement("div");
     recipeTitle.className = "recipe-title";
-    recipeTitle.textContent = "Recipe Book";
+    recipeTitle.textContent = "제작법 책";
     recipeBook.append(recipeTitle);
 
     for (const view of stats.recipes.filter((entry) => entry.unlocked && entry.recipe.size <= gridSize)) {
@@ -452,7 +454,7 @@ export class Hud {
 
     const playerPaper = document.createElement("div");
     playerPaper.className = "player-paper";
-    playerPaper.textContent = "VF";
+    playerPaper.textContent = "CC";
 
     const craftingArea = document.createElement("div");
     craftingArea.className = "crafting-area";
@@ -512,7 +514,7 @@ export class Hud {
     panel.classList.add("furnace-panel");
     const title = panel.querySelector(".inventory-title");
     if (title) {
-      title.textContent = "Furnace";
+      title.textContent = "화로";
     }
 
     const recipeBook = panel.querySelector(".recipe-book");
@@ -520,7 +522,7 @@ export class Hud {
       recipeBook.innerHTML = "";
       const recipeTitle = document.createElement("div");
       recipeTitle.className = "recipe-title";
-      recipeTitle.textContent = "Smelting";
+      recipeTitle.textContent = "제련";
       recipeBook.append(recipeTitle);
 
       for (const view of stats.smeltingRecipes) {
@@ -564,14 +566,14 @@ export class Hud {
     const header = document.createElement("div");
     header.className = "catalog-header";
     const title = document.createElement("strong");
-    title.textContent = "Item Browser";
+    title.textContent = "아이템 목록";
     const count = document.createElement("span");
     count.textContent = `${filtered.length}/${allItems.length}`;
     header.append(title, count);
 
     const search = document.createElement("input");
     search.className = "catalog-search";
-    search.placeholder = "Search items";
+    search.placeholder = "아이템 검색";
     search.value = this.catalogQuery;
     search.addEventListener("input", () => {
       this.catalogQuery = search.value;
@@ -634,7 +636,7 @@ export class Hud {
     if (!stats || !this.catalogSelectedItem) {
       const empty = document.createElement("div");
       empty.className = "catalog-empty";
-      empty.textContent = "Select an item to inspect recipes.";
+      empty.textContent = "아이템을 선택하면 제작법과 획득처가 표시됩니다.";
       detail.append(empty);
       return detail;
     }
@@ -654,11 +656,11 @@ export class Hud {
     const meta = document.createElement("div");
     meta.className = "catalog-meta";
     meta.append(
-      this.makeCatalogChip("Implemented"),
-      this.makeCatalogChip(item.placeBlock ? "Block" : item.toolKind ? "Tool" : item.food ? "Food" : "Item")
+      this.makeCatalogChip("구현됨"),
+      this.makeCatalogChip(item.placeBlock ? "블록" : item.toolKind ? "도구" : item.food ? "음식" : "아이템")
     );
     if (item.toolKind) {
-      meta.append(this.makeCatalogChip(`${item.toolTier ?? "hand"} ${item.toolKind}`));
+      meta.append(this.makeCatalogChip(this.toolChip(item.toolTier ?? "hand", item.toolKind)));
     }
 
     const recipes = stats.recipes.filter((entry) => entry.recipe.result.item === item.id);
@@ -668,21 +670,21 @@ export class Hud {
     detail.append(head, meta);
 
     if (recipes.length > 0) {
-      detail.append(this.makeCatalogSectionTitle("Crafting"));
+      detail.append(this.makeCatalogSectionTitle("제작법"));
       for (const view of recipes) {
         detail.append(this.makeRecipePreview(view, gridSize));
       }
     }
 
     if (smelting.length > 0) {
-      detail.append(this.makeCatalogSectionTitle("Smelting"));
+      detail.append(this.makeCatalogSectionTitle("제련법"));
       for (const view of smelting) {
         detail.append(this.makeSmeltingPreview(view));
       }
     }
 
     if (sources.length > 0) {
-      detail.append(this.makeCatalogSectionTitle("Obtained From"));
+      detail.append(this.makeCatalogSectionTitle("획득처"));
       const sourceRow = document.createElement("div");
       sourceRow.className = "source-list";
       for (const source of sources) {
@@ -694,7 +696,7 @@ export class Hud {
     if (recipes.length === 0 && smelting.length === 0 && sources.length === 0) {
       const noRecipe = document.createElement("div");
       noRecipe.className = "catalog-empty";
-      noRecipe.textContent = "No recipe yet. This item exists in data but is found through play or future systems.";
+      noRecipe.textContent = "아직 제작법은 없지만, 월드 탐험이나 다음 시스템에서 쓰일 수 있는 구현된 아이템입니다.";
       detail.append(noRecipe);
     }
 
@@ -730,7 +732,7 @@ export class Hud {
     const action = document.createElement("button");
     action.className = "recipe-fill-button";
     action.type = "button";
-    action.textContent = view.craftable && recipe.size <= gridSize ? "Fill" : "Missing";
+    action.textContent = view.craftable && recipe.size <= gridSize ? "배치" : "부족";
     action.disabled = !view.craftable || recipe.size > gridSize;
     action.addEventListener("click", () => this.callbacks.onCraftRecipe(recipe.id, false, gridSize));
 
@@ -757,11 +759,28 @@ export class Hud {
     const action = document.createElement("button");
     action.className = "recipe-fill-button";
     action.type = "button";
-    action.textContent = view.smeltable ? "Smelt" : "Missing";
+    action.textContent = view.smeltable ? "제련" : "부족";
     action.disabled = !view.smeltable;
     action.addEventListener("click", () => this.callbacks.onSmeltRecipe(recipe.id, false));
     card.append(input, fuel, arrow, result, action);
     return card;
+  }
+
+  private toolChip(tier: ToolTier, kind: ToolKind): string {
+    const tiers: Record<ToolTier, string> = {
+      hand: "손",
+      wood: "나무",
+      stone: "돌",
+      iron: "철",
+      diamond: "다이아"
+    };
+    const kinds: Record<ToolKind, string> = {
+      none: "도구 없음",
+      pickaxe: "곡괭이",
+      axe: "도끼",
+      shovel: "삽"
+    };
+    return `${tiers[tier]} ${kinds[kind]}`;
   }
 
   private makeCatalogSectionTitle(text: string): HTMLElement {

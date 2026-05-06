@@ -13,7 +13,7 @@ export interface SmeltingRecipe {
 export const SMELTING_RECIPES: SmeltingRecipe[] = [
   {
     id: "smelt_copper",
-    name: "Smelt Copper Ingot",
+    name: "구리 주괴 제련",
     input: "raw_copper",
     fuel: "coal",
     result: { item: "copper_ingot", count: 1 },
@@ -21,7 +21,7 @@ export const SMELTING_RECIPES: SmeltingRecipe[] = [
   },
   {
     id: "smelt_iron",
-    name: "Smelt Iron Ingot",
+    name: "철 주괴 제련",
     input: "raw_iron",
     fuel: "coal",
     result: { item: "iron_ingot", count: 1 },
@@ -29,7 +29,7 @@ export const SMELTING_RECIPES: SmeltingRecipe[] = [
   },
   {
     id: "smelt_gold",
-    name: "Smelt Gold Ingot",
+    name: "금 주괴 제련",
     input: "raw_gold",
     fuel: "coal",
     result: { item: "gold_ingot", count: 1 },

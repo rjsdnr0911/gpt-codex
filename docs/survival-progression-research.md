@@ -1,6 +1,6 @@
-# Voxel Frontier Survival Progression Research
+# Codex Craft Survival Progression Research
 
-이 문서는 Minecraft Wiki의 ore, crafting, smelting, generated structures 정보를 참고해 Voxel Frontier에 필요한 생존 진행 요소를 정리한 것이다. 공식 에셋이나 명칭 의존은 피하고, 기능적 역할을 독립 voxel sandbox에 맞춰 재해석한다.
+이 문서는 Minecraft Wiki의 ore, crafting, smelting, generated structures 정보를 참고해 Codex Craft에 필요한 생존 진행 요소를 정리한 것이다. 공식 에셋이나 명칭 의존은 피하고, 기능적 역할을 독립 voxel sandbox에 맞춰 재해석한다.
 
 ## 1순위 진행 루프
 

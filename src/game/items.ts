@@ -74,233 +74,233 @@ export interface ItemDefinition {
 export const ITEM_DEFINITIONS: Record<ItemId, ItemDefinition> = {
   grass_block: {
     id: "grass_block",
-    name: "Grass Block",
+    name: "잔디 블록",
     maxStack: 64,
     color: "#67ad58",
     placeBlock: BlockType.Grass
   },
   dirt: {
     id: "dirt",
-    name: "Dirt",
+    name: "흙",
     maxStack: 64,
     color: "#7b5237",
     placeBlock: BlockType.Dirt
   },
   stone: {
     id: "stone",
-    name: "Stone",
+    name: "돌",
     maxStack: 64,
     color: "#858d8a",
     placeBlock: BlockType.Stone
   },
   sand: {
     id: "sand",
-    name: "Sand",
+    name: "모래",
     maxStack: 64,
     color: "#d4c682",
     placeBlock: BlockType.Sand
   },
   water: {
     id: "water",
-    name: "Water",
+    name: "물",
     maxStack: 64,
     color: "#2e9bc9",
     placeBlock: BlockType.Water
   },
   log: {
     id: "log",
-    name: "Log",
+    name: "원목",
     maxStack: 64,
     color: "#805331",
     placeBlock: BlockType.Log
   },
   leaves: {
     id: "leaves",
-    name: "Leaves",
+    name: "나뭇잎",
     maxStack: 64,
     color: "#448f50",
     placeBlock: BlockType.Leaves
   },
   ore: {
     id: "ore",
-    name: "Ore",
+    name: "구형 광석",
     maxStack: 64,
     color: "#59bdc4",
     placeBlock: BlockType.Ore
   },
   brick: {
     id: "brick",
-    name: "Brick",
+    name: "벽돌 블록",
     maxStack: 64,
     color: "#a65049",
     placeBlock: BlockType.Brick
   },
   planks: {
     id: "planks",
-    name: "Planks",
+    name: "나무 판자",
     maxStack: 64,
     color: "#b9854b",
     placeBlock: BlockType.Planks
   },
   stick: {
     id: "stick",
-    name: "Stick",
+    name: "막대기",
     maxStack: 64,
     color: "#b98a55"
   },
   crafting_table: {
     id: "crafting_table",
-    name: "Crafting Table",
+    name: "제작대",
     maxStack: 64,
     color: "#a46d3d",
     placeBlock: BlockType.CraftingTable
   },
   coal_ore: {
     id: "coal_ore",
-    name: "Coal Ore",
+    name: "석탄 광석",
     maxStack: 64,
     color: "#4b4d4b",
     placeBlock: BlockType.CoalOre
   },
   copper_ore: {
     id: "copper_ore",
-    name: "Copper Ore",
+    name: "구리 광석",
     maxStack: 64,
     color: "#a76846",
     placeBlock: BlockType.CopperOre
   },
   iron_ore: {
     id: "iron_ore",
-    name: "Iron Ore",
+    name: "철 광석",
     maxStack: 64,
     color: "#b08f75",
     placeBlock: BlockType.IronOre
   },
   gold_ore: {
     id: "gold_ore",
-    name: "Gold Ore",
+    name: "금 광석",
     maxStack: 64,
     color: "#d6aa35",
     placeBlock: BlockType.GoldOre
   },
   redstone_ore: {
     id: "redstone_ore",
-    name: "Redstone Ore",
+    name: "레드스톤 광석",
     maxStack: 64,
     color: "#b53634",
     placeBlock: BlockType.RedstoneOre
   },
   lapis_ore: {
     id: "lapis_ore",
-    name: "Lapis Ore",
+    name: "청금석 광석",
     maxStack: 64,
     color: "#345dbc",
     placeBlock: BlockType.LapisOre
   },
   diamond_ore: {
     id: "diamond_ore",
-    name: "Diamond Ore",
+    name: "다이아몬드 광석",
     maxStack: 64,
     color: "#58d6d0",
     placeBlock: BlockType.DiamondOre
   },
   emerald_ore: {
     id: "emerald_ore",
-    name: "Emerald Ore",
+    name: "에메랄드 광석",
     maxStack: 64,
     color: "#45bf62",
     placeBlock: BlockType.EmeraldOre
   },
   coal: {
     id: "coal",
-    name: "Coal",
+    name: "석탄",
     maxStack: 64,
     color: "#2e3130"
   },
   raw_copper: {
     id: "raw_copper",
-    name: "Raw Copper",
+    name: "구리 원석",
     maxStack: 64,
     color: "#c9794a"
   },
   raw_iron: {
     id: "raw_iron",
-    name: "Raw Iron",
+    name: "철 원석",
     maxStack: 64,
     color: "#c2a38d"
   },
   raw_gold: {
     id: "raw_gold",
-    name: "Raw Gold",
+    name: "금 원석",
     maxStack: 64,
     color: "#e1b845"
   },
   copper_ingot: {
     id: "copper_ingot",
-    name: "Copper Ingot",
+    name: "구리 주괴",
     maxStack: 64,
     color: "#d98b5a"
   },
   iron_ingot: {
     id: "iron_ingot",
-    name: "Iron Ingot",
+    name: "철 주괴",
     maxStack: 64,
     color: "#c9d1d1"
   },
   gold_ingot: {
     id: "gold_ingot",
-    name: "Gold Ingot",
+    name: "금 주괴",
     maxStack: 64,
     color: "#f0c747"
   },
   redstone_dust: {
     id: "redstone_dust",
-    name: "Redstone Dust",
+    name: "레드스톤 가루",
     maxStack: 64,
     color: "#d8423a"
   },
   lapis_lazuli: {
     id: "lapis_lazuli",
-    name: "Lapis Lazuli",
+    name: "청금석",
     maxStack: 64,
     color: "#365bc8"
   },
   diamond: {
     id: "diamond",
-    name: "Diamond",
+    name: "다이아몬드",
     maxStack: 64,
     color: "#65e0dc"
   },
   emerald: {
     id: "emerald",
-    name: "Emerald",
+    name: "에메랄드",
     maxStack: 64,
     color: "#4bd66d"
   },
   furnace: {
     id: "furnace",
-    name: "Furnace",
+    name: "화로",
     maxStack: 64,
     color: "#686e6b",
     placeBlock: BlockType.Furnace
   },
   chest: {
     id: "chest",
-    name: "Chest",
+    name: "상자",
     maxStack: 64,
     color: "#9b642f",
     placeBlock: BlockType.Chest
   },
   torch: {
     id: "torch",
-    name: "Torch",
+    name: "횃불",
     maxStack: 64,
     color: "#f0a83c",
     placeBlock: BlockType.Torch
   },
   wooden_pickaxe: {
     id: "wooden_pickaxe",
-    name: "Wooden Pickaxe",
+    name: "나무 곡괭이",
     maxStack: 1,
     color: "#c28a4e",
     toolKind: "pickaxe",
@@ -310,7 +310,7 @@ export const ITEM_DEFINITIONS: Record<ItemId, ItemDefinition> = {
   },
   stone_pickaxe: {
     id: "stone_pickaxe",
-    name: "Stone Pickaxe",
+    name: "돌 곡괭이",
     maxStack: 1,
     color: "#9aa09d",
     toolKind: "pickaxe",
@@ -320,7 +320,7 @@ export const ITEM_DEFINITIONS: Record<ItemId, ItemDefinition> = {
   },
   iron_pickaxe: {
     id: "iron_pickaxe",
-    name: "Iron Pickaxe",
+    name: "철 곡괭이",
     maxStack: 1,
     color: "#c7d0cf",
     toolKind: "pickaxe",
@@ -330,7 +330,7 @@ export const ITEM_DEFINITIONS: Record<ItemId, ItemDefinition> = {
   },
   diamond_pickaxe: {
     id: "diamond_pickaxe",
-    name: "Diamond Pickaxe",
+    name: "다이아몬드 곡괭이",
     maxStack: 1,
     color: "#65e0dc",
     toolKind: "pickaxe",
@@ -340,7 +340,7 @@ export const ITEM_DEFINITIONS: Record<ItemId, ItemDefinition> = {
   },
   wooden_axe: {
     id: "wooden_axe",
-    name: "Wooden Axe",
+    name: "나무 도끼",
     maxStack: 1,
     color: "#c28a4e",
     toolKind: "axe",
@@ -350,7 +350,7 @@ export const ITEM_DEFINITIONS: Record<ItemId, ItemDefinition> = {
   },
   stone_axe: {
     id: "stone_axe",
-    name: "Stone Axe",
+    name: "돌 도끼",
     maxStack: 1,
     color: "#9aa09d",
     toolKind: "axe",
@@ -360,7 +360,7 @@ export const ITEM_DEFINITIONS: Record<ItemId, ItemDefinition> = {
   },
   wooden_shovel: {
     id: "wooden_shovel",
-    name: "Wooden Shovel",
+    name: "나무 삽",
     maxStack: 1,
     color: "#c28a4e",
     toolKind: "shovel",
@@ -370,7 +370,7 @@ export const ITEM_DEFINITIONS: Record<ItemId, ItemDefinition> = {
   },
   stone_shovel: {
     id: "stone_shovel",
-    name: "Stone Shovel",
+    name: "돌 삽",
     maxStack: 1,
     color: "#9aa09d",
     toolKind: "shovel",
@@ -380,7 +380,7 @@ export const ITEM_DEFINITIONS: Record<ItemId, ItemDefinition> = {
   },
   apple: {
     id: "apple",
-    name: "Apple",
+    name: "사과",
     maxStack: 64,
     color: "#cf3c38",
     food: {
@@ -390,7 +390,7 @@ export const ITEM_DEFINITIONS: Record<ItemId, ItemDefinition> = {
   },
   bread: {
     id: "bread",
-    name: "Bread",
+    name: "빵",
     maxStack: 64,
     color: "#d7a85a",
     food: {

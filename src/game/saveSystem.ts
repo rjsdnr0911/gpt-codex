@@ -40,6 +40,7 @@ export interface WorldSaveV2 {
   inventory: InventoryState;
   survival: SurvivalState;
   unlockedRecipes: string[];
+  lootedChests?: string[];
 }
 
 export interface SaveIndexV2 {

@@ -131,7 +131,7 @@ export class World {
     this.detailNoise = createNoise2D(mulberry32(this.seedInt ^ 0x8c3c6f43));
     this.caveNoise = createNoise3D(mulberry32(this.seedInt ^ 0x2f63d4a1));
     this.caveRoomNoise = createNoise3D(mulberry32(this.seedInt ^ 0x9a1c77e3));
-    this.group.name = "Voxel world";
+    this.group.name = "Codex Craft world";
   }
 
   setModifiedBlocks(blocks: SavedBlock[]): void {
