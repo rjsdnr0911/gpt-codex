@@ -1,6 +1,6 @@
 import { BLOCKS, BlockType } from "../game/blocks";
 import { HOTBAR_START, InventoryState } from "../game/inventory";
-import { ITEM_DEFINITIONS, ItemStack } from "../game/items";
+import { ITEM_DEFINITIONS, ItemId, ItemStack } from "../game/items";
 import { Recipe } from "../game/recipes";
 import { SmeltingRecipe } from "../game/smelting";
 import { SurvivalState } from "../game/survival";
@@ -92,6 +92,9 @@ export class Hud {
   private stats: HudStats | null = null;
   private panelSignature = "";
   private toastTimer = 0;
+  private catalogQuery = "";
+  private catalogPage = 0;
+  private catalogSelectedItem: ItemId | null = null;
 
   constructor(parent: HTMLElement, callbacks: HudCallbacks) {
     this.callbacks = callbacks;
@@ -445,6 +448,8 @@ export class Hud {
       recipeBook.append(button);
     }
 
+    const catalog = this.makeItemCatalog(gridSize);
+
     const playerPaper = document.createElement("div");
     playerPaper.className = "player-paper";
     playerPaper.textContent = "VF";
@@ -493,7 +498,7 @@ export class Hud {
       cursor.append(this.makeItemIcon(stats.inventory.cursor), this.makeCount(stats.inventory.cursor.count));
     }
 
-    panel.append(title, recipeBook, playerPaper, craftingArea, storage, hotbar, cursor, tooltip);
+    panel.append(title, recipeBook, playerPaper, craftingArea, storage, hotbar, catalog, cursor, tooltip);
     return panel;
   }
 
@@ -532,6 +537,280 @@ export class Hud {
     }
 
     return panel;
+  }
+
+  private makeItemCatalog(gridSize: 2 | 3): HTMLElement {
+    const stats = this.stats;
+    const wrap = document.createElement("div");
+    wrap.className = "item-catalog";
+
+    const allItems = Object.values(ITEM_DEFINITIONS);
+    const query = this.catalogQuery.trim().toLowerCase();
+    const filtered = allItems.filter((item) => {
+      if (!query) {
+        return true;
+      }
+
+      return item.name.toLowerCase().includes(query) || item.id.toLowerCase().includes(query);
+    });
+    if (this.catalogSelectedItem && !filtered.some((item) => item.id === this.catalogSelectedItem)) {
+      this.catalogSelectedItem = filtered[0]?.id ?? null;
+    }
+    const pageSize = 48;
+    const pages = Math.max(1, Math.ceil(filtered.length / pageSize));
+    this.catalogPage = Math.max(0, Math.min(this.catalogPage, pages - 1));
+    const visible = filtered.slice(this.catalogPage * pageSize, this.catalogPage * pageSize + pageSize);
+
+    const header = document.createElement("div");
+    header.className = "catalog-header";
+    const title = document.createElement("strong");
+    title.textContent = "Item Browser";
+    const count = document.createElement("span");
+    count.textContent = `${filtered.length}/${allItems.length}`;
+    header.append(title, count);
+
+    const search = document.createElement("input");
+    search.className = "catalog-search";
+    search.placeholder = "Search items";
+    search.value = this.catalogQuery;
+    search.addEventListener("input", () => {
+      this.catalogQuery = search.value;
+      this.catalogPage = 0;
+      this.renderPanel();
+      const next = this.panelLayer.querySelector<HTMLInputElement>(".catalog-search");
+      next?.focus();
+      next?.setSelectionRange(next.value.length, next.value.length);
+    });
+
+    const pager = document.createElement("div");
+    pager.className = "catalog-pager";
+    const previous = this.makeCatalogButton("<", () => {
+      this.catalogPage = (this.catalogPage - 1 + pages) % pages;
+      this.renderPanel();
+    });
+    const pageLabel = document.createElement("span");
+    pageLabel.textContent = `${this.catalogPage + 1}/${pages}`;
+    const next = this.makeCatalogButton(">", () => {
+      this.catalogPage = (this.catalogPage + 1) % pages;
+      this.renderPanel();
+    });
+    pager.append(previous, pageLabel, next);
+
+    const grid = document.createElement("div");
+    grid.className = "catalog-grid";
+    for (const item of visible) {
+      const button = document.createElement("button");
+      button.className = `catalog-item ${this.catalogSelectedItem === item.id ? "selected" : ""}`;
+      button.type = "button";
+      button.dataset.item = item.id;
+      button.title = item.name;
+      button.setAttribute("aria-label", item.name);
+      button.addEventListener("click", () => {
+        this.catalogSelectedItem = item.id;
+        this.renderPanel();
+      });
+      button.append(this.makeItemIcon({ item: item.id, count: 1 }));
+      grid.append(button);
+    }
+
+    const detail = this.makeCatalogDetail(gridSize, stats);
+    wrap.append(header, search, pager, grid, detail);
+    return wrap;
+  }
+
+  private makeCatalogButton(label: string, onClick: () => void): HTMLButtonElement {
+    const button = document.createElement("button");
+    button.className = "catalog-page-button";
+    button.type = "button";
+    button.textContent = label;
+    button.addEventListener("click", onClick);
+    return button;
+  }
+
+  private makeCatalogDetail(gridSize: 2 | 3, stats: HudStats | null): HTMLElement {
+    const detail = document.createElement("div");
+    detail.className = "catalog-detail";
+
+    if (!stats || !this.catalogSelectedItem) {
+      const empty = document.createElement("div");
+      empty.className = "catalog-empty";
+      empty.textContent = "Select an item to inspect recipes.";
+      detail.append(empty);
+      return detail;
+    }
+
+    const item = ITEM_DEFINITIONS[this.catalogSelectedItem];
+    const head = document.createElement("div");
+    head.className = "catalog-detail-head";
+    head.append(this.makeItemIcon({ item: item.id, count: 1 }));
+    const labels = document.createElement("div");
+    const name = document.createElement("strong");
+    name.textContent = item.name;
+    const id = document.createElement("span");
+    id.textContent = item.id;
+    labels.append(name, id);
+    head.append(labels);
+
+    const meta = document.createElement("div");
+    meta.className = "catalog-meta";
+    meta.append(
+      this.makeCatalogChip("Implemented"),
+      this.makeCatalogChip(item.placeBlock ? "Block" : item.toolKind ? "Tool" : item.food ? "Food" : "Item")
+    );
+    if (item.toolKind) {
+      meta.append(this.makeCatalogChip(`${item.toolTier ?? "hand"} ${item.toolKind}`));
+    }
+
+    const recipes = stats.recipes.filter((entry) => entry.recipe.result.item === item.id);
+    const smelting = stats.smeltingRecipes.filter((entry) => entry.recipe.result.item === item.id);
+    const sources = this.dropSources(item.id);
+
+    detail.append(head, meta);
+
+    if (recipes.length > 0) {
+      detail.append(this.makeCatalogSectionTitle("Crafting"));
+      for (const view of recipes) {
+        detail.append(this.makeRecipePreview(view, gridSize));
+      }
+    }
+
+    if (smelting.length > 0) {
+      detail.append(this.makeCatalogSectionTitle("Smelting"));
+      for (const view of smelting) {
+        detail.append(this.makeSmeltingPreview(view));
+      }
+    }
+
+    if (sources.length > 0) {
+      detail.append(this.makeCatalogSectionTitle("Obtained From"));
+      const sourceRow = document.createElement("div");
+      sourceRow.className = "source-list";
+      for (const source of sources) {
+        sourceRow.append(this.makeCatalogChip(source));
+      }
+      detail.append(sourceRow);
+    }
+
+    if (recipes.length === 0 && smelting.length === 0 && sources.length === 0) {
+      const noRecipe = document.createElement("div");
+      noRecipe.className = "catalog-empty";
+      noRecipe.textContent = "No recipe yet. This item exists in data but is found through play or future systems.";
+      detail.append(noRecipe);
+    }
+
+    return detail;
+  }
+
+  private makeRecipePreview(view: RecipeView, gridSize: 2 | 3): HTMLElement {
+    const recipe = view.recipe;
+    const card = document.createElement("div");
+    card.className = "catalog-recipe-card";
+
+    const mini = document.createElement("div");
+    mini.className = `recipe-mini-grid cells-${recipe.size}`;
+    const layout = this.recipePreviewLayout(recipe);
+    for (let index = 0; index < recipe.size * recipe.size; index += 1) {
+      const cell = document.createElement("span");
+      cell.className = "recipe-mini-cell";
+      const item = layout[index];
+      if (item) {
+        cell.append(this.makeItemIcon({ item, count: 1 }));
+      }
+      mini.append(cell);
+    }
+
+    const arrow = document.createElement("span");
+    arrow.className = "recipe-mini-arrow";
+    arrow.textContent = ">";
+
+    const result = document.createElement("span");
+    result.className = "recipe-mini-result";
+    result.append(this.makeItemIcon(recipe.result), this.makeCount(recipe.result.count));
+
+    const action = document.createElement("button");
+    action.className = "recipe-fill-button";
+    action.type = "button";
+    action.textContent = view.craftable && recipe.size <= gridSize ? "Fill" : "Missing";
+    action.disabled = !view.craftable || recipe.size > gridSize;
+    action.addEventListener("click", () => this.callbacks.onCraftRecipe(recipe.id, false, gridSize));
+
+    card.append(mini, arrow, result, action);
+    return card;
+  }
+
+  private makeSmeltingPreview(view: { recipe: SmeltingRecipe; smeltable: boolean }): HTMLElement {
+    const recipe = view.recipe;
+    const card = document.createElement("div");
+    card.className = "catalog-recipe-card smelting-preview";
+    const input = document.createElement("span");
+    input.className = "recipe-mini-result";
+    input.append(this.makeItemIcon({ item: recipe.input, count: 1 }));
+    const fuel = document.createElement("span");
+    fuel.className = "recipe-mini-result";
+    fuel.append(this.makeItemIcon({ item: recipe.fuel, count: 1 }));
+    const arrow = document.createElement("span");
+    arrow.className = "recipe-mini-arrow";
+    arrow.textContent = ">";
+    const result = document.createElement("span");
+    result.className = "recipe-mini-result";
+    result.append(this.makeItemIcon(recipe.result), this.makeCount(recipe.result.count));
+    const action = document.createElement("button");
+    action.className = "recipe-fill-button";
+    action.type = "button";
+    action.textContent = view.smeltable ? "Smelt" : "Missing";
+    action.disabled = !view.smeltable;
+    action.addEventListener("click", () => this.callbacks.onSmeltRecipe(recipe.id, false));
+    card.append(input, fuel, arrow, result, action);
+    return card;
+  }
+
+  private makeCatalogSectionTitle(text: string): HTMLElement {
+    const title = document.createElement("div");
+    title.className = "catalog-section-title";
+    title.textContent = text;
+    return title;
+  }
+
+  private makeCatalogChip(text: string): HTMLElement {
+    const chip = document.createElement("span");
+    chip.className = "catalog-chip";
+    chip.textContent = text;
+    return chip;
+  }
+
+  private recipePreviewLayout(recipe: Recipe): Array<ItemId | null> {
+    const size = recipe.size;
+    const layout: Array<ItemId | null> = Array.from({ length: size * size }, () => null);
+    if (recipe.type === "shapeless") {
+      let cursor = 0;
+      for (const [item, count] of Object.entries(recipe.ingredients ?? {})) {
+        for (let index = 0; index < count; index += 1) {
+          if (cursor < layout.length) {
+            layout[cursor] = item as ItemId;
+            cursor += 1;
+          }
+        }
+      }
+      return layout;
+    }
+
+    for (let y = 0; y < (recipe.pattern?.length ?? 0); y += 1) {
+      const row = recipe.pattern?.[y] ?? "";
+      for (let x = 0; x < Math.min(row.length, size); x += 1) {
+        const item = recipe.key?.[row[x]];
+        if (item) {
+          layout[y * size + x] = item;
+        }
+      }
+    }
+
+    return layout;
+  }
+
+  private dropSources(item: ItemId): string[] {
+    return Object.values(BLOCKS)
+      .filter((block) => block.drops === item)
+      .map((block) => block.displayName);
   }
 
   private renderHotbar(): void {
