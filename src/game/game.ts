@@ -4,6 +4,9 @@ import {
   HOTBAR_START,
   InventoryState,
   addStack,
+  canEquip,
+  clickArmorSlot,
+  clickOffhandSlot,
   clickSlot,
   createInventoryState,
   normalizeInventory,
@@ -13,7 +16,7 @@ import {
   swapWithHotbar
 } from "./inventory";
 import { InputController, MouseActions } from "./input";
-import { blockFromItem, ITEM_DEFINITIONS, ItemId, ItemStack, maxStackFor, stacksMatch, ToolTier } from "./items";
+import { blockFromItem, EquipmentSlot, ITEM_DEFINITIONS, ItemId, ItemStack, maxStackFor, stacksMatch, ToolTier } from "./items";
 import { clamp, hash3 } from "./math";
 import { MobManager } from "./mobs";
 import { Player } from "./player";
@@ -34,7 +37,7 @@ import {
   SavedGameV1,
   WorldSaveV2
 } from "./saveSystem";
-import { createSurvivalState, SurvivalController, SurvivalState } from "./survival";
+import { armorPoints, createSurvivalState, SurvivalController, SurvivalState } from "./survival";
 import { SkySystem } from "./sky";
 import { createVoxelMaterials, VoxelMaterials } from "./textureAtlas";
 import { WORLDGEN_VERSION, World } from "./world";
@@ -90,7 +93,7 @@ export class Game {
   private saving = false;
   private saveState = "준비됨";
   private mode: HudMode = "title";
-  private saveIndex: SaveIndexV2 = { version: 2, activeWorldId: null, worlds: [] };
+  private saveIndex: SaveIndexV2 = { version: 3, activeWorldId: null, worlds: [] };
   private activeWorld: WorldSaveV2 | null = null;
   private inventory: InventoryState = createInventoryState();
   private craftingGrid: Array<ItemStack | null> = Array.from({ length: 9 }, () => null);
@@ -100,6 +103,7 @@ export class Game {
   private lootedChests = new Set<string>();
   private mining: MiningState | null = null;
   private selectedItemTimer = 0;
+  private attackCooldown = 0;
 
   constructor(root: HTMLElement) {
     this.root = root;
@@ -155,6 +159,8 @@ export class Game {
       },
       onRespawn: () => this.respawn(),
       onInventorySlot: (index, button, shift) => this.handleInventoryClick(index, button, shift),
+      onEquipmentSlot: (slot, button) => this.handleEquipmentClick(slot, button),
+      onOffhandSlot: (button) => this.handleOffhandClick(button),
       onCraftSlot: (index, button, shift) => this.handleCraftingSlotClick(index, button, shift),
       onCraftResult: (shift) => this.handleCraftingResult(shift),
       onSlotDrop: (fromRef, toRef) => this.handleSlotDrop(fromRef, toRef),
@@ -208,7 +214,7 @@ export class Game {
 
     const migrated = this.convertLegacy(legacy);
     const next: SaveIndexV2 = {
-      version: 2,
+      version: 3,
       activeWorldId: migrated.id,
       worlds: [migrated]
     };
@@ -221,7 +227,7 @@ export class Game {
     const inventory = createInventoryState();
     const spawn = new THREE.Vector3().fromArray(legacy.player.position);
     return {
-      version: 2,
+      version: 3,
       worldgenVersion: 2,
       id: "legacy-world",
       name: "이전 월드",
@@ -233,7 +239,9 @@ export class Game {
       inventory,
       survival: createSurvivalState(spawn),
       unlockedRecipes: [],
-      lootedChests: []
+      lootedChests: [],
+      entities: [],
+      gameRules: { mobGriefing: true }
     };
   }
 
@@ -259,6 +267,7 @@ export class Game {
     this.survival = new SurvivalController({ ...save.survival });
     this.unlockedRecipes = new Set(save.unlockedRecipes);
     this.lootedChests = new Set(save.lootedChests ?? []);
+    this.mobs.restore(save.entities ?? []);
     this.world.ensureChunksAround(this.player.position);
     this.saveState = "준비됨";
     this.hud.setWorlds(this.worldSummaries());
@@ -290,7 +299,7 @@ export class Game {
     player.pitch = -0.08;
     const survival = createSurvivalState(spawn);
     const save: WorldSaveV2 = {
-      version: 2,
+      version: 3,
       worldgenVersion: WORLDGEN_VERSION,
       id,
       name,
@@ -302,7 +311,9 @@ export class Game {
       inventory: createInventoryState(),
       survival,
       unlockedRecipes: [],
-      lootedChests: []
+      lootedChests: [],
+      entities: [],
+      gameRules: { mobGriefing: true }
     };
     await this.saveSystem.upsertWorld(save);
     this.saveIndex = await this.saveSystem.loadIndex();
@@ -344,7 +355,7 @@ export class Game {
     player.yaw = world.findScenicYaw(spawn);
     player.pitch = -0.08;
     const save: WorldSaveV2 = {
-      version: 2,
+      version: 3,
       worldgenVersion: WORLDGEN_VERSION,
       id: `world-${now.toString(36)}-caves`,
       name: `${source.name} 동굴 복사본`,
@@ -356,7 +367,9 @@ export class Game {
       inventory: createInventoryState(),
       survival: createSurvivalState(spawn),
       unlockedRecipes: [],
-      lootedChests: []
+      lootedChests: [],
+      entities: [],
+      gameRules: { mobGriefing: true }
     };
 
     this.saveIndex = await this.saveSystem.upsertWorld(save);
@@ -474,6 +487,7 @@ export class Game {
     this.elapsed += delta;
     this.fps = this.fps * 0.92 + (1 / Math.max(delta, 0.001)) * 0.08;
     this.selectedItemTimer = Math.max(0, this.selectedItemTimer - delta);
+    this.attackCooldown = Math.max(0, this.attackCooldown - delta);
 
     this.handleKeyboard();
 
@@ -570,7 +584,8 @@ export class Game {
     this.selectedHit = this.raycastBlock();
     this.updateHighlight();
 
-    const mobDamage = this.mobs.update(
+    const actions = this.input.consumeActions();
+    const mobEvents = this.mobs.update(
       delta,
       this.world,
       this.player.position,
@@ -578,11 +593,18 @@ export class Game {
       this.undergroundFactor,
       this.elapsed
     );
-    if (mobDamage > 0) {
-      this.survival.damage(mobDamage);
+    if (mobEvents.damage > 0) {
+      this.damagePlayer(mobEvents.damage, actions.secondaryHeld);
     }
 
-    const actions = this.input.consumeActions();
+    for (const drop of mobEvents.drops) {
+      addStack(this.inventory, drop);
+    }
+
+    for (const explosion of mobEvents.explosions) {
+      this.handleExplosion(explosion.x, explosion.y, explosion.z, explosion.radius, explosion.damage);
+    }
+
     this.handleMining(delta, actions);
     this.handleUse(actions, sneaking);
 
@@ -596,21 +618,115 @@ export class Game {
     }
   }
 
+  private damagePlayer(amount: number, blocking: boolean): number {
+    return this.survival.damage(amount, {
+      armorSlots: this.inventory.armorSlots,
+      blocking: blocking && this.inventory.offhand?.item === "shield"
+    });
+  }
+
+  private handleExplosion(x: number, y: number, z: number, radius: number, maxDamage: number): void {
+    const playerDistance = this.player.position.distanceTo(new THREE.Vector3(x, y, z));
+    if (playerDistance < radius + 2.2) {
+      const exposure = clamp(1 - playerDistance / (radius + 2.2), 0, 1);
+      this.damagePlayer(Math.ceil(maxDamage * exposure), false);
+      const knock = this.player.position.clone().sub(new THREE.Vector3(x, y, z)).normalize().multiplyScalar(6 * exposure);
+      this.player.velocity.add(knock);
+      this.player.velocity.y += 4 * exposure;
+    }
+
+    let destroyed = 0;
+    const r = Math.ceil(radius);
+    for (let by = Math.floor(y) - r; by <= Math.floor(y) + r; by += 1) {
+      for (let bz = Math.floor(z) - r; bz <= Math.floor(z) + r; bz += 1) {
+        for (let bx = Math.floor(x) - r; bx <= Math.floor(x) + r; bx += 1) {
+          const distance = Math.hypot(bx + 0.5 - x, by + 0.5 - y, bz + 0.5 - z);
+          if (distance > radius || by <= 0 || by >= WORLD_HEIGHT - 1) {
+            continue;
+          }
+
+          const block = this.world.getBlock(bx, by, bz);
+          if (block === BlockType.Air || block === BlockType.Water) {
+            continue;
+          }
+
+          const definition = BLOCKS[block];
+          const resistance = definition.hardness * 0.55 + (definition.requiredTool ? 0.8 : 0);
+          const power = (1 - distance / radius) * 3.4;
+          const jitter = hash3(this.world.seedInt ^ 0xc4ee, bx, by, bz) * 0.65;
+          if (power + jitter <= resistance) {
+            continue;
+          }
+
+          if (this.world.setBlock(bx, by, bz, BlockType.Air)) {
+            destroyed += 1;
+            const drop = definition.drops as ItemId | null;
+            if (drop && hash3(this.world.seedInt ^ 0xd20d, bx, by, bz) < 0.32) {
+              addStack(this.inventory, { item: drop, count: 1 });
+            }
+          }
+        }
+      }
+    }
+
+    this.hud.showToast(destroyed > 0 ? `크리퍼 폭발: 블록 ${destroyed}개 파괴` : "크리퍼가 폭발했습니다");
+    this.queueSave();
+  }
+
   private handleMining(delta: number, actions: MouseActions): void {
     if (actions.primary) {
-      const hit = this.mobs.hitByRay(this.player.getEyePosition(), this.player.getViewDirection(), 4.4, this.attackDamage());
+      if (this.attackCooldown > 0) {
+        return;
+      }
+
+      const held = selectedStack(this.inventory);
+      const heldDefinition = held ? ITEM_DEFINITIONS[held.item] : null;
+      if (heldDefinition?.toolKind === "bow") {
+        if (!removeItems(this.inventory, "arrow", 1)) {
+          this.hud.showToast("화살이 필요합니다");
+          return;
+        }
+
+        const hit = this.mobs.hitByRay(this.player.getEyePosition(), this.player.getViewDirection(), 30, 6);
+        this.attackCooldown = heldDefinition.combat?.cooldown ?? 0.9;
+        this.damageHeldTool();
+        this.survival.addExhaustion(0.04);
+        if (hit) {
+          if (hit.killed) {
+            for (const drop of hit.drops) {
+              addStack(this.inventory, drop);
+            }
+            this.unlockRecipesFromInventory();
+            this.hud.showToast(`화살로 ${hit.name} 처치`);
+          } else {
+            this.hud.showToast(`화살로 ${hit.name} 명중`);
+          }
+        }
+        this.queueSave();
+        return;
+      }
+
+      const damage = this.attackDamage();
+      const hit = this.mobs.hitByRay(
+        this.player.getEyePosition(),
+        this.player.getViewDirection(),
+        this.attackRange(),
+        damage
+      );
       if (hit) {
         this.mining = null;
+        this.attackCooldown = this.attackDelay();
         this.damageHeldTool();
-        this.survival.addExhaustion(0.02);
+        this.survival.addExhaustion(0.08);
         if (hit.killed) {
-          if (Math.random() < 0.28) {
-            addStack(this.inventory, { item: "apple", count: 1 });
+          for (const drop of hit.drops) {
+            addStack(this.inventory, drop);
           }
-          this.hud.showToast("그늘 추적자를 처치했습니다");
+          this.unlockRecipesFromInventory();
+          this.hud.showToast(`${hit.name} 처치`);
           this.queueSave();
         } else {
-          this.hud.showToast("그늘 추적자를 공격했습니다");
+          this.hud.showToast(`${hit.name} 공격`);
         }
         return;
       }
@@ -671,6 +787,11 @@ export class Game {
       return;
     }
 
+    if (this.selectedHit && interactable === "bed" && !sneaking) {
+      this.sleepInBed(this.selectedHit);
+      return;
+    }
+
     if (held && heldDef?.food && this.survival.state.hunger < 20) {
       this.survival.eat(heldDef.food.hunger, heldDef.food.saturation);
       this.consumeSelected(1);
@@ -720,19 +841,23 @@ export class Game {
     const held = selectedStack(this.inventory);
     const itemDefinition = held ? ITEM_DEFINITIONS[held.item] : null;
 
-    if (!itemDefinition?.toolKind) {
-      return 2;
+    if (itemDefinition?.combat) {
+      return itemDefinition.combat.damage;
     }
 
-    const tierBonus: Record<ToolTier, number> = {
-      hand: 0,
-      wood: 1,
-      stone: 2,
-      iron: 3,
-      diamond: 4
-    };
-    const base = itemDefinition.toolKind === "axe" ? 4 : itemDefinition.toolKind === "pickaxe" ? 3 : 2.5;
-    return base + tierBonus[itemDefinition.toolTier ?? "hand"];
+    return 1;
+  }
+
+  private attackDelay(): number {
+    const held = selectedStack(this.inventory);
+    const itemDefinition = held ? ITEM_DEFINITIONS[held.item] : null;
+    return itemDefinition?.combat?.cooldown ?? 0.5;
+  }
+
+  private attackRange(): number {
+    const held = selectedStack(this.inventory);
+    const itemDefinition = held ? ITEM_DEFINITIONS[held.item] : null;
+    return itemDefinition?.combat?.range ?? 4.4;
   }
 
   private breakBlock(hit: VoxelHit): void {
@@ -754,6 +879,10 @@ export class Game {
 
     if (hit.block === BlockType.Leaves && Math.random() < 0.12) {
       drop = "apple";
+    }
+
+    if (hit.block === BlockType.Gravel && Math.random() < 0.18) {
+      drop = "flint";
     }
 
     if (hit.block === BlockType.RedstoneOre) {
@@ -823,6 +952,14 @@ export class Game {
       { item: "torch", count: 2 + Math.floor(roll(0x70c4) * 5) }
     ];
 
+    if (roll(0xa770) > 0.35) {
+      loot.push({ item: "arrow", count: 2 + Math.floor(roll(0xa771) * 6) });
+    }
+
+    if (roll(0xf11a) > 0.42) {
+      loot.push({ item: "bread", count: 1 + Math.floor(roll(0xf11b) * 2) });
+    }
+
     if (roll(0x1f0a) > 0.45) {
       loot.push({ item: "raw_iron", count: 1 + Math.floor(roll(0x10e) * 3) });
     }
@@ -835,7 +972,29 @@ export class Game {
       loot.push({ item: "diamond", count: 1 });
     }
 
+    if (roll(0xc01f) > 0.86) {
+      loot.push({ item: "chainmail_boots", count: 1, durability: 70 });
+    }
+
     return loot;
+  }
+
+  private sleepInBed(hit: VoxelHit): void {
+    this.survival.state.spawn = [hit.x + 0.5, hit.y + 1, hit.z + 0.5];
+
+    if (this.dayFactor < 0.5) {
+      const dayLength = 210;
+      const cycle = (this.elapsed / dayLength) % 1;
+      const target = 0.18;
+      const advance = cycle < target ? target - cycle : 1 - cycle + target;
+      this.elapsed += advance * dayLength;
+      this.survival.heal(2);
+      this.hud.showToast("침대에서 쉬고 아침이 되었습니다");
+    } else {
+      this.hud.showToast("스폰 위치를 침대로 설정했습니다");
+    }
+
+    this.queueSave();
   }
 
   private consumeSelected(count: number): void {
@@ -857,6 +1016,16 @@ export class Game {
       clickSlot(this.inventory, index, button);
     }
     this.unlockRecipesFromInventory();
+    this.queueSave();
+  }
+
+  private handleEquipmentClick(slot: EquipmentSlot, button: 0 | 2): void {
+    clickArmorSlot(this.inventory, slot, button);
+    this.queueSave();
+  }
+
+  private handleOffhandClick(button: 0 | 2): void {
+    clickOffhandSlot(this.inventory, button);
     this.queueSave();
   }
 
@@ -888,6 +1057,11 @@ export class Game {
     const from = this.getSlotByRef(fromRef);
     const to = this.getSlotByRef(toRef);
     if (!from) {
+      return;
+    }
+
+    if (!this.slotAccepts(toRef, from) || (to && !this.slotAccepts(fromRef, to))) {
+      this.hud.showToast("이 슬롯에는 장착할 수 없습니다");
       return;
     }
 
@@ -1108,6 +1282,14 @@ export class Game {
       return this.craftingGrid[Number(ref.replace("craft:", ""))] ?? null;
     }
 
+    if (ref.startsWith("equip:")) {
+      return this.inventory.armorSlots[ref.replace("equip:", "") as EquipmentSlot] ?? null;
+    }
+
+    if (ref === "offhand") {
+      return this.inventory.offhand;
+    }
+
     return null;
   }
 
@@ -1119,6 +1301,26 @@ export class Game {
     if (ref.startsWith("craft:")) {
       this.craftingGrid[Number(ref.replace("craft:", ""))] = stack;
     }
+
+    if (ref.startsWith("equip:")) {
+      this.inventory.armorSlots[ref.replace("equip:", "") as EquipmentSlot] = stack;
+    }
+
+    if (ref === "offhand") {
+      this.inventory.offhand = stack;
+    }
+  }
+
+  private slotAccepts(ref: string, stack: ItemStack): boolean {
+    if (ref.startsWith("equip:")) {
+      return canEquip(ref.replace("equip:", "") as EquipmentSlot, stack);
+    }
+
+    if (ref === "offhand") {
+      return canEquip("offhand", stack);
+    }
+
+    return true;
   }
 
   private maxCraftable(recipe: (typeof RECIPES)[number]): number {
@@ -1134,7 +1336,7 @@ export class Game {
   }
 
   private tierMeets(actual: ToolTier, required: ToolTier): boolean {
-    const order: ToolTier[] = ["hand", "wood", "stone", "iron", "diamond"];
+    const order: ToolTier[] = ["hand", "wood", "stone", "copper", "iron", "gold", "diamond"];
     return order.indexOf(actual) >= order.indexOf(required);
   }
 
@@ -1209,7 +1411,7 @@ export class Game {
     const surfaceHeight = this.world.terrainHeight(Math.floor(this.player.position.x), Math.floor(this.player.position.z));
     const underground = clamp((surfaceHeight - this.player.position.y - 3) / 16, 0, 1);
     const torchGlow = this.updateTorchLights(delta);
-    const holdingTorch = selectedStack(this.inventory)?.item === "torch";
+    const holdingTorch = selectedStack(this.inventory)?.item === "torch" || this.inventory.offhand?.item === "torch";
     const sunOffset = skyState.sunDirection.clone().multiplyScalar(88);
 
     this.dayFactor = day;
@@ -1318,6 +1520,7 @@ export class Game {
       }
       const save: WorldSaveV2 = {
         ...this.activeWorld,
+        version: 3,
         worldgenVersion: this.activeWorld.worldgenVersion ?? this.world.worldgenVersion,
         updatedAt: now,
         modified: this.world.exportModifiedBlocks(),
@@ -1325,7 +1528,9 @@ export class Game {
         inventory: inventoryForSave,
         survival: { ...this.survival.state },
         unlockedRecipes: [...this.unlockedRecipes],
-        lootedChests: [...this.lootedChests]
+        lootedChests: [...this.lootedChests],
+        entities: this.mobs.snapshot(),
+        gameRules: this.activeWorld.gameRules ?? { mobGriefing: true }
       };
       this.activeWorld = save;
       this.saveIndex = await this.saveSystem.upsertWorld(save);

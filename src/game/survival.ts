@@ -1,4 +1,6 @@
 import * as THREE from "three";
+import { ArmorSlots } from "./inventory";
+import { ITEM_DEFINITIONS } from "./items";
 import { clamp } from "./math";
 
 export interface SurvivalState {
@@ -90,22 +92,31 @@ export class SurvivalController {
     this.state.saturation = clamp(this.state.saturation + saturation, 0, this.state.hunger);
   }
 
-  damage(amount: number, ignoreInvulnerability = false): void {
+  damage(amount: number, options: boolean | DamageOptions = {}): number {
     if (!this.state.alive) {
-      return;
+      return 0;
     }
 
+    const normalized = typeof options === "boolean" ? { ignoreInvulnerability: options } : options;
+    const ignoreInvulnerability = normalized.ignoreInvulnerability ?? false;
     if (!ignoreInvulnerability && this.state.invulnerabilityTimer > 0) {
-      return;
+      return 0;
     }
 
-    this.state.health = Math.max(0, this.state.health - amount);
+    const reduced = applyArmorReduction(amount, normalized.armorSlots, normalized.blocking ?? false);
+    if (reduced <= 0) {
+      return 0;
+    }
+
+    this.state.health = Math.max(0, this.state.health - reduced);
     this.state.invulnerabilityTimer = 0.7;
     this.addExhaustion(0.1);
 
     if (this.state.health <= 0) {
       this.state.alive = false;
     }
+
+    return reduced;
   }
 
   heal(amount: number): void {
@@ -121,4 +132,38 @@ export class SurvivalController {
     this.state.alive = true;
     this.state.invulnerabilityTimer = 1.5;
   }
+}
+
+export interface DamageOptions {
+  ignoreInvulnerability?: boolean;
+  armorSlots?: ArmorSlots;
+  blocking?: boolean;
+}
+
+export function armorPoints(slots: ArmorSlots): number {
+  return Object.values(slots).reduce((sum, stack) => sum + (stack ? ITEM_DEFINITIONS[stack.item].armor?.points ?? 0 : 0), 0);
+}
+
+export function armorToughness(slots: ArmorSlots): number {
+  return Object.values(slots).reduce(
+    (sum, stack) => sum + (stack ? ITEM_DEFINITIONS[stack.item].armor?.toughness ?? 0 : 0),
+    0
+  );
+}
+
+export function applyArmorReduction(amount: number, slots?: ArmorSlots, blocking = false): number {
+  let incoming = amount;
+
+  if (blocking) {
+    incoming *= 0.45;
+  }
+
+  if (slots) {
+    const points = armorPoints(slots);
+    const toughness = armorToughness(slots);
+    const reduction = Math.min(20, Math.max(points / 5, points - incoming / (2 + toughness / 4))) / 25;
+    incoming *= 1 - reduction;
+  }
+
+  return Math.max(1, Math.round(incoming));
 }

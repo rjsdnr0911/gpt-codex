@@ -20,6 +20,18 @@ export interface SavedPlayer {
   selectedSlot: number;
 }
 
+export interface SavedEntity {
+  id: number;
+  type: string;
+  position: [number, number, number];
+  health: number;
+  age: number;
+}
+
+export interface GameRules {
+  mobGriefing: boolean;
+}
+
 export interface SavedGameV1 {
   version: 1;
   seed: string;
@@ -28,7 +40,7 @@ export interface SavedGameV1 {
 }
 
 export interface WorldSaveV2 {
-  version: 2;
+  version: 2 | 3;
   worldgenVersion?: number;
   id: string;
   name: string;
@@ -41,10 +53,19 @@ export interface WorldSaveV2 {
   survival: SurvivalState;
   unlockedRecipes: string[];
   lootedChests?: string[];
+  entities?: SavedEntity[];
+  gameRules?: GameRules;
 }
 
+export type WorldSaveV3 = WorldSaveV2 & {
+  version: 3;
+  lootedChests: string[];
+  entities: SavedEntity[];
+  gameRules: GameRules;
+};
+
 export interface SaveIndexV2 {
-  version: 2;
+  version: 2 | 3;
   activeWorldId: string | null;
   worlds: WorldSaveV2[];
 }
@@ -53,7 +74,7 @@ export class SaveSystem {
   async loadIndex(): Promise<SaveIndexV2> {
     const index = await get<SaveIndexV2>(SAVE_INDEX_KEY);
 
-    if (index?.version === 2) {
+    if (index?.version === 2 || index?.version === 3) {
       return index;
     }
 
@@ -61,14 +82,14 @@ export class SaveSystem {
 
     if (legacy?.version === 1) {
       return {
-        version: 2,
+        version: 3,
         activeWorldId: "legacy-world",
         worlds: []
       };
     }
 
     return {
-      version: 2,
+      version: 3,
       activeWorldId: null,
       worlds: []
     };
@@ -93,6 +114,7 @@ export class SaveSystem {
       index.worlds.unshift(world);
     }
 
+    index.version = 3;
     index.activeWorldId = world.id;
     index.worlds.sort((a, b) => b.updatedAt - a.updatedAt);
     await this.saveIndex(index);

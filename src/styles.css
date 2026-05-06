@@ -556,6 +556,11 @@ button {
   justify-content: end;
 }
 
+.icon-row.armor {
+  grid-column: 1 / -1;
+  justify-content: center;
+}
+
 .icon-row.air {
   grid-column: 1 / -1;
   justify-content: center;
@@ -563,6 +568,7 @@ button {
 }
 
 .heart-icon,
+.armor-icon,
 .hunger-icon,
 .air-icon {
   width: 18px;
@@ -571,6 +577,19 @@ button {
   image-rendering: pixelated;
   clip-path: polygon(50% 94%, 8% 55%, 8% 25%, 28% 9%, 50% 22%, 72% 9%, 92% 25%, 92% 55%);
   background: rgba(25, 25, 25, 0.72);
+}
+
+.armor-icon {
+  clip-path: polygon(18% 12%, 82% 12%, 92% 38%, 76% 90%, 24% 90%, 8% 38%);
+}
+
+.armor-icon.full,
+.armor-icon.half {
+  background: #b7c2c7;
+}
+
+.armor-icon.half {
+  background: linear-gradient(90deg, #b7c2c7 50%, rgba(25, 25, 25, 0.72) 50%);
 }
 
 .heart-icon.full,
@@ -652,6 +671,7 @@ button {
 
 .survival-hotbar .slot,
 .inventory-slot,
+.equipment-slot,
 .craft-cell,
 .craft-slot,
 .craft-result-slot {
@@ -788,7 +808,23 @@ button {
 
 .item-stick,
 .item-wooden_pickaxe,
-.item-stone_pickaxe {
+.item-stone_pickaxe,
+.item-iron_pickaxe,
+.item-diamond_pickaxe,
+.item-wooden_axe,
+.item-stone_axe,
+.item-wooden_shovel,
+.item-stone_shovel,
+.item-wooden_sword,
+.item-stone_sword,
+.item-copper_sword,
+.item-iron_sword,
+.item-golden_sword,
+.item-diamond_sword,
+.item-bow,
+.item-arrow,
+.item-shield,
+.item-shears {
   width: 64%;
   height: 16%;
   aspect-ratio: auto;
@@ -801,14 +837,18 @@ button {
 }
 
 .item-wooden_pickaxe,
-.item-stone_pickaxe {
+.item-stone_pickaxe,
+.item-iron_pickaxe,
+.item-diamond_pickaxe {
   overflow: visible;
   border-radius: 2px;
   background: linear-gradient(90deg, #70421f, #c49055 56%, #6d3f20);
 }
 
 .item-wooden_pickaxe::before,
-.item-stone_pickaxe::before {
+.item-stone_pickaxe::before,
+.item-iron_pickaxe::before,
+.item-diamond_pickaxe::before {
   inset: auto auto 48% 6%;
   width: 82%;
   height: 76%;
@@ -818,6 +858,98 @@ button {
     14px -4px 0 -3px rgba(255, 255, 255, 0.3),
     -10px 8px 0 -3px rgba(0, 0, 0, 0.22);
   transform: rotate(38deg);
+}
+
+.item-wooden_sword,
+.item-stone_sword,
+.item-copper_sword,
+.item-iron_sword,
+.item-golden_sword,
+.item-diamond_sword {
+  overflow: visible;
+  height: 18%;
+  background: linear-gradient(90deg, #70421f 0 24%, #d8aa62 24% 42%, var(--item-color) 42% 100%);
+}
+
+.item-wooden_sword::before,
+.item-stone_sword::before,
+.item-copper_sword::before,
+.item-iron_sword::before,
+.item-golden_sword::before,
+.item-diamond_sword::before {
+  inset: -72% auto auto 34%;
+  width: 18%;
+  height: 244%;
+  background: var(--item-color);
+  box-shadow: 4px 0 0 rgba(255, 255, 255, 0.24);
+  transform: rotate(38deg);
+}
+
+.item-bow {
+  width: 42%;
+  height: 72%;
+  border-radius: 50%;
+  border: 4px solid #9b6638;
+  border-left-color: transparent;
+  background: transparent;
+  transform: rotate(14deg);
+}
+
+.item-arrow {
+  width: 68%;
+  height: 10%;
+  background: linear-gradient(90deg, #d8d3c0 0 72%, #e8e2d2 72% 100%);
+}
+
+.item-shield {
+  width: 56%;
+  height: 72%;
+  transform: none;
+  clip-path: polygon(12% 8%, 88% 8%, 82% 78%, 50% 96%, 18% 78%);
+  background:
+    linear-gradient(90deg, transparent 45%, rgba(255, 255, 255, 0.24) 45% 55%, transparent 55%),
+    var(--item-color);
+}
+
+.item-shears {
+  width: 66%;
+  height: 48%;
+  transform: rotate(-24deg);
+  background:
+    radial-gradient(circle at 24% 64%, transparent 0 18%, var(--item-color) 19% 30%, transparent 31%),
+    radial-gradient(circle at 74% 64%, transparent 0 18%, var(--item-color) 19% 30%, transparent 31%),
+    linear-gradient(45deg, transparent 0 42%, var(--item-color) 43% 58%, transparent 59%);
+}
+
+.item-leather_helmet,
+.item-leather_chestplate,
+.item-leather_leggings,
+.item-leather_boots,
+.item-copper_helmet,
+.item-copper_chestplate,
+.item-copper_leggings,
+.item-copper_boots,
+.item-chainmail_helmet,
+.item-chainmail_chestplate,
+.item-chainmail_leggings,
+.item-chainmail_boots,
+.item-iron_helmet,
+.item-iron_chestplate,
+.item-iron_leggings,
+.item-iron_boots,
+.item-golden_helmet,
+.item-golden_chestplate,
+.item-golden_leggings,
+.item-golden_boots,
+.item-diamond_helmet,
+.item-diamond_chestplate,
+.item-diamond_leggings,
+.item-diamond_boots {
+  clip-path: polygon(18% 12%, 82% 12%, 92% 38%, 76% 90%, 24% 90%, 8% 38%);
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.34), transparent 42%),
+    repeating-linear-gradient(90deg, rgba(0, 0, 0, 0.18) 0 4px, transparent 4px 8px),
+    var(--item-color);
 }
 
 .item-apple,
@@ -1205,19 +1337,61 @@ button {
 
 .player-paper {
   grid-area: paper;
-  width: 150px;
-  min-height: 150px;
+  width: 176px;
+  min-height: 176px;
   justify-self: center;
   display: grid;
-  place-items: center;
+  grid-template-columns: 48px 1fr;
+  grid-template-areas: "equip avatar";
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
   border: 3px solid #2b2b2b;
   background:
     linear-gradient(180deg, #313d44, #151d22),
     repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.04) 0 3px, transparent 3px 7px);
+}
+
+.player-avatar {
+  grid-area: avatar;
+  min-height: 132px;
+  display: grid;
+  place-items: center;
   color: #e5f4f4;
   font-weight: 900;
-  font-size: 46px;
+  font-size: 42px;
   text-shadow: 3px 3px 0 #000;
+}
+
+.equipment-slots {
+  grid-area: equip;
+  display: grid;
+  gap: 4px;
+}
+
+.equipment-slot {
+  position: relative;
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  cursor: grab;
+}
+
+.equipment-slot:active {
+  cursor: grabbing;
+}
+
+.equipment-slot.dragging {
+  opacity: 0.42;
+}
+
+.equipment-empty-label {
+  color: rgba(230, 230, 220, 0.62);
+  font-size: 10px;
+  font-weight: 900;
+  line-height: 1;
+  text-shadow: 1px 1px 0 #000;
 }
 
 .crafting-area {

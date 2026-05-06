@@ -26,7 +26,9 @@ export const enum BlockType {
   EmeraldOre = 19,
   Furnace = 20,
   Chest = 21,
-  Torch = 22
+  Torch = 22,
+  Gravel = 23,
+  Bed = 24
 }
 
 export type BlockId =
@@ -52,7 +54,9 @@ export type BlockId =
   | "emerald_ore"
   | "furnace"
   | "chest"
-  | "torch";
+  | "torch"
+  | "gravel"
+  | "bed";
 
 export const enum TileId {
   GrassTop = 0,
@@ -79,7 +83,9 @@ export const enum TileId {
   FurnaceFront = 21,
   FurnaceSide = 22,
   Chest = 23,
-  Torch = 24
+  Torch = 24,
+  Gravel = 25,
+  Bed = 26
 }
 
 export type FaceName = "top" | "bottom" | "north" | "south" | "east" | "west";
@@ -96,9 +102,9 @@ export interface BlockDefinition {
   drops: string | null;
   preferredTool?: "pickaxe" | "axe" | "shovel";
   requiredTool?: "pickaxe" | "axe" | "shovel";
-  requiredTier?: "wood" | "stone" | "iron" | "diamond";
+  requiredTier?: "wood" | "stone" | "copper" | "iron" | "gold" | "diamond";
   placeableItem?: string;
-  interactable?: "crafting_table" | "furnace" | "chest";
+  interactable?: "crafting_table" | "furnace" | "chest" | "bed";
 }
 
 const allFaces = (tile: TileId): Record<FaceName, TileId> => ({
@@ -455,6 +461,33 @@ export const BLOCKS: Record<BlockType, BlockDefinition> = {
     hardness: 0.1,
     drops: "torch",
     placeableItem: "torch"
+  },
+  [BlockType.Gravel]: {
+    id: "gravel",
+    displayName: "자갈",
+    solid: true,
+    transparent: false,
+    fluid: false,
+    swatch: "#7a7c7a",
+    tiles: allFaces(TileId.Gravel),
+    hardness: 0.6,
+    drops: "gravel",
+    preferredTool: "shovel",
+    placeableItem: "gravel"
+  },
+  [BlockType.Bed]: {
+    id: "bed",
+    displayName: "침대",
+    solid: true,
+    transparent: false,
+    fluid: false,
+    swatch: "#c94646",
+    tiles: allFaces(TileId.Bed),
+    hardness: 0.4,
+    drops: "bed",
+    preferredTool: "axe",
+    placeableItem: "bed",
+    interactable: "bed"
   }
 };
 

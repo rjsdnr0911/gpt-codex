@@ -1,6 +1,6 @@
 import { BLOCKS, BlockType } from "../game/blocks";
 import { HOTBAR_START, InventoryState } from "../game/inventory";
-import { ITEM_DEFINITIONS, ItemId, ItemStack, ToolKind, ToolTier } from "../game/items";
+import { EquipmentSlot, ITEM_DEFINITIONS, ItemId, ItemStack, ToolKind, ToolTier } from "../game/items";
 import { Recipe } from "../game/recipes";
 import { SmeltingRecipe } from "../game/smelting";
 import { SurvivalState } from "../game/survival";
@@ -41,6 +41,8 @@ export interface HudCallbacks {
   onQuitToTitle: () => void;
   onRespawn: () => void;
   onInventorySlot: (index: number, button: 0 | 2, shift: boolean) => void;
+  onEquipmentSlot: (slot: EquipmentSlot, button: 0 | 2) => void;
+  onOffhandSlot: (button: 0 | 2) => void;
   onCraftSlot: (index: number, button: 0 | 2, shift: boolean) => void;
   onCraftResult: (shift: boolean) => void;
   onSlotDrop: (fromRef: string, toRef: string) => void;
@@ -83,6 +85,7 @@ export class Hud {
   private readonly itemName: HTMLDivElement;
   private readonly miningFill: HTMLSpanElement;
   private readonly heartRow: HTMLDivElement;
+  private readonly armorRow: HTMLDivElement;
   private readonly hungerRow: HTMLDivElement;
   private readonly airRow: HTMLDivElement;
   private readonly hotbar: HTMLDivElement;
@@ -136,13 +139,15 @@ export class Hud {
 
     const statusBars = document.createElement("div");
     statusBars.className = "survival-bars";
+    this.armorRow = document.createElement("div");
+    this.armorRow.className = "icon-row armor";
     this.heartRow = document.createElement("div");
     this.heartRow.className = "icon-row hearts";
     this.hungerRow = document.createElement("div");
     this.hungerRow.className = "icon-row hunger";
     this.airRow = document.createElement("div");
     this.airRow.className = "icon-row air";
-    statusBars.append(this.heartRow, this.hungerRow, this.airRow);
+    statusBars.append(this.armorRow, this.heartRow, this.hungerRow, this.airRow);
 
     this.hotbar = document.createElement("div");
     this.hotbar.className = "hotbar survival-hotbar";
@@ -222,6 +227,7 @@ export class Hud {
 
     this.itemName.textContent = selected ? ITEM_DEFINITIONS[selected.item].name : "";
     this.miningFill.style.width = `${Math.round(this.stats.miningProgress * 100)}%`;
+    this.renderIconRow(this.armorRow, "armor", this.armorPoints());
     this.renderIconRow(this.heartRow, "heart", this.stats.survival.health);
     this.renderIconRow(this.hungerRow, "hunger", this.stats.survival.hunger);
     this.renderIconRow(this.airRow, "air", this.stats.survival.air);
@@ -409,7 +415,7 @@ export class Hud {
       panel.style.setProperty("--cursor-y", `${event.clientY}px`);
 
       const slot = (event.target as HTMLElement).closest<HTMLButtonElement>(
-        ".inventory-slot, .craft-slot, .craft-result-slot"
+        ".inventory-slot, .craft-slot, .craft-result-slot, .equipment-slot"
       );
       const stack = this.stackFromSlotElement(slot);
       if (!stack) {
@@ -454,7 +460,19 @@ export class Hud {
 
     const playerPaper = document.createElement("div");
     playerPaper.className = "player-paper";
-    playerPaper.textContent = "CC";
+    const avatar = document.createElement("div");
+    avatar.className = "player-avatar";
+    avatar.textContent = "CC";
+    const equipment = document.createElement("div");
+    equipment.className = "equipment-slots";
+    equipment.append(
+      this.makeEquipmentSlot("head", "투구"),
+      this.makeEquipmentSlot("chest", "흉갑"),
+      this.makeEquipmentSlot("legs", "각반"),
+      this.makeEquipmentSlot("feet", "부츠"),
+      this.makeOffhandSlot()
+    );
+    playerPaper.append(avatar, equipment);
 
     const craftingArea = document.createElement("div");
     craftingArea.className = "crafting-area";
@@ -771,14 +789,20 @@ export class Hud {
       hand: "손",
       wood: "나무",
       stone: "돌",
+      copper: "구리",
       iron: "철",
+      gold: "금",
       diamond: "다이아"
     };
     const kinds: Record<ToolKind, string> = {
       none: "도구 없음",
       pickaxe: "곡괭이",
       axe: "도끼",
-      shovel: "삽"
+      shovel: "삽",
+      sword: "검",
+      bow: "활",
+      shield: "방패",
+      shears: "가위"
     };
     return `${tiers[tier]} ${kinds[kind]}`;
   }
@@ -827,9 +851,27 @@ export class Hud {
   }
 
   private dropSources(item: ItemId): string[] {
-    return Object.values(BLOCKS)
+    const blockSources = Object.values(BLOCKS)
       .filter((block) => block.drops === item)
       .map((block) => block.displayName);
+    const mobSources: Partial<Record<ItemId, string[]>> = {
+      rotten_flesh: ["좀비"],
+      bone: ["스켈레톤"],
+      arrow: ["스켈레톤", "제작"],
+      string: ["거미"],
+      spider_eye: ["거미"],
+      gunpowder: ["크리퍼"],
+      raw_beef: ["소"],
+      leather: ["소"],
+      raw_porkchop: ["돼지"],
+      raw_mutton: ["양"],
+      wool: ["양"],
+      raw_chicken: ["닭"],
+      feather: ["닭"],
+      egg: ["닭"],
+      flint: ["자갈"]
+    };
+    return [...blockSources, ...(mobSources[item] ?? [])];
   }
 
   private renderHotbar(): void {
@@ -969,6 +1011,76 @@ export class Hud {
     return button;
   }
 
+  private makeEquipmentSlot(slot: EquipmentSlot, label: string): HTMLButtonElement {
+    const stack = this.stats?.inventory.armorSlots[slot] ?? null;
+    const button = this.makeEquipmentButton(`equip:${slot}`, label, stack);
+    button.addEventListener("click", () => this.callbacks.onEquipmentSlot(slot, 0));
+    button.addEventListener("contextmenu", (event) => {
+      event.preventDefault();
+      this.callbacks.onEquipmentSlot(slot, 2);
+    });
+    return button;
+  }
+
+  private makeOffhandSlot(): HTMLButtonElement {
+    const stack = this.stats?.inventory.offhand ?? null;
+    const button = this.makeEquipmentButton("offhand", "보조", stack);
+    button.classList.add("offhand-slot");
+    button.addEventListener("click", () => this.callbacks.onOffhandSlot(0));
+    button.addEventListener("contextmenu", (event) => {
+      event.preventDefault();
+      this.callbacks.onOffhandSlot(2);
+    });
+    return button;
+  }
+
+  private makeEquipmentButton(ref: string, label: string, stack: ItemStack | null): HTMLButtonElement {
+    const button = document.createElement("button");
+    button.className = "equipment-slot";
+    button.type = "button";
+    button.dataset.slotRef = ref;
+    button.dataset.emptyLabel = label;
+    button.draggable = Boolean(stack);
+    button.setAttribute("aria-label", stack ? ITEM_DEFINITIONS[stack.item].name : label);
+    button.title = stack ? ITEM_DEFINITIONS[stack.item].name : label;
+    button.addEventListener("dragstart", (event) => {
+      if (!stack || !event.dataTransfer) {
+        event.preventDefault();
+        return;
+      }
+      event.dataTransfer.effectAllowed = "move";
+      event.dataTransfer.setData("text/plain", ref);
+      button.classList.add("dragging");
+    });
+    button.addEventListener("dragend", () => {
+      button.classList.remove("dragging");
+    });
+    button.addEventListener("dragover", (event) => {
+      event.preventDefault();
+      if (event.dataTransfer) {
+        event.dataTransfer.dropEffect = "move";
+      }
+    });
+    button.addEventListener("drop", (event) => {
+      event.preventDefault();
+      const from = event.dataTransfer?.getData("text/plain");
+      if (from) {
+        this.callbacks.onSlotDrop(from, ref);
+      }
+    });
+
+    if (stack) {
+      button.append(this.makeItemIcon(stack), this.makeCount(stack.count));
+    } else {
+      const empty = document.createElement("span");
+      empty.className = "equipment-empty-label";
+      empty.textContent = label;
+      button.append(empty);
+    }
+
+    return button;
+  }
+
   private makeItemIcon(stack: ItemStack): HTMLSpanElement {
     const def = ITEM_DEFINITIONS[stack.item];
     const icon = document.createElement("span");
@@ -998,6 +1110,14 @@ export class Hud {
       return this.stats.craftingGrid[Number(ref.replace("craft:", ""))] ?? null;
     }
 
+    if (ref?.startsWith("equip:")) {
+      return this.stats.inventory.armorSlots[ref.replace("equip:", "") as EquipmentSlot] ?? null;
+    }
+
+    if (ref === "offhand") {
+      return this.stats.inventory.offhand;
+    }
+
     if (ref === "result") {
       return this.stats.craftingResult;
     }
@@ -1013,6 +1133,17 @@ export class Hud {
       icon.className = `${kind}-icon ${points >= 2 ? "full" : points >= 1 ? "half" : "empty"}`;
       parent.append(icon);
     }
+  }
+
+  private armorPoints(): number {
+    if (!this.stats) {
+      return 0;
+    }
+
+    return Object.values(this.stats.inventory.armorSlots).reduce(
+      (sum, stack) => sum + (stack ? ITEM_DEFINITIONS[stack.item].armor?.points ?? 0 : 0),
+      0
+    );
   }
 
   private makeMenuPanel(titleText: string, copy: string, actions: HTMLElement[], giant = false): HTMLDivElement {
@@ -1058,6 +1189,15 @@ export class Hud {
     const slots = stats.inventory.slots
       .map((slot) => (slot ? `${slot.item}:${slot.count}:${slot.durability ?? ""}` : "-"))
       .join("|");
+    const armor = (["head", "chest", "legs", "feet"] as EquipmentSlot[])
+      .map((slot) => {
+        const stack = stats.inventory.armorSlots[slot];
+        return stack ? `${slot}:${stack.item}:${stack.count}:${stack.durability ?? ""}` : `${slot}:-`;
+      })
+      .join("|");
+    const offhand = stats.inventory.offhand
+      ? `${stats.inventory.offhand.item}:${stats.inventory.offhand.count}:${stats.inventory.offhand.durability ?? ""}`
+      : "-";
     const cursor = stats.inventory.cursor
       ? `${stats.inventory.cursor.item}:${stats.inventory.cursor.count}:${stats.inventory.cursor.durability ?? ""}`
       : "-";
@@ -1073,7 +1213,7 @@ export class Hud {
     const smelting = stats.smeltingRecipes
       .map((entry) => `${entry.recipe.id}:${entry.smeltable ? 1 : 0}`)
       .join("|");
-    return `${this.mode}|${slots}|${cursor}|${crafting}|${result}|${recipes}|${smelting}`;
+    return `${this.mode}|${slots}|${armor}|${offhand}|${cursor}|${crafting}|${result}|${recipes}|${smelting}`;
   }
 
   private numberFromEvent(event: MouseEvent): number | null {

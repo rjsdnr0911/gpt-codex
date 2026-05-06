@@ -102,6 +102,47 @@ export class HandView {
       return;
     }
 
+    if (definition.toolKind === "sword") {
+      const grip = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.22, 0.06), this.makeMaterial("#70421f"));
+      grip.position.set(-0.05, -0.02, -0.18);
+      grip.rotation.set(0.18, 0.05, -0.62);
+      const guard = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.055, 0.055), this.makeMaterial("#6d4b31"));
+      guard.position.set(-0.11, 0.08, -0.2);
+      guard.rotation.copy(grip.rotation);
+      const blade = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.52, 0.045), material);
+      blade.position.set(-0.2, 0.27, -0.25);
+      blade.rotation.copy(grip.rotation);
+      this.itemRoot.add(grip, guard, blade);
+      return;
+    }
+
+    if (definition.toolKind === "bow") {
+      const bow = new THREE.Group();
+      for (let index = 0; index < 3; index += 1) {
+        const part = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.24, 0.045), this.makeMaterial("#9b6638"));
+        part.position.set(-0.12 + index * 0.035, 0.02 + index * 0.13, -0.22);
+        part.rotation.set(0.2, -0.08, -0.35 + index * 0.18);
+        bow.add(part);
+      }
+      const string = new THREE.Mesh(new THREE.BoxGeometry(0.018, 0.6, 0.018), this.makeMaterial("#e8e2d2"));
+      string.position.set(-0.02, 0.2, -0.26);
+      string.rotation.set(0.2, -0.08, -0.12);
+      bow.add(string);
+      this.itemRoot.add(bow);
+      return;
+    }
+
+    if (definition.toolKind === "shield") {
+      const shield = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.42, 0.055), material);
+      shield.position.set(-0.08, 0.09, -0.24);
+      shield.rotation.set(0.32, -0.72, 0.06);
+      const band = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.07, 0.06), this.makeMaterial("#c9d1d1"));
+      band.position.set(-0.08, 0.12, -0.275);
+      band.rotation.copy(shield.rotation);
+      this.itemRoot.add(shield, band);
+      return;
+    }
+
     const item = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.24, 0.045), material);
     item.position.set(-0.08, 0.12, -0.22);
     item.rotation.set(0.4, -0.6, 0.18);

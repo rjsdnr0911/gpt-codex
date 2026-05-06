@@ -14,7 +14,7 @@ export interface Recipe {
   unlocksBy: ItemId[];
 }
 
-export const RECIPES: Recipe[] = [
+const BASE_RECIPES: Recipe[] = [
   {
     id: "planks",
     name: "나무 판자",
@@ -47,93 +47,63 @@ export const RECIPES: Recipe[] = [
     category: "building",
     unlocksBy: ["planks"]
   },
+  toolRecipe("wooden_pickaxe", "나무 곡괭이", "planks", 59, ["PPP", " S ", " S "]),
+  toolRecipe("wooden_axe", "나무 도끼", "planks", 59, ["PP", "PS", " S"]),
+  toolRecipe("wooden_shovel", "나무 삽", "planks", 59, ["P", "S"], 2),
+  toolRecipe("stone_pickaxe", "돌 곡괭이", "stone", 131, ["CCC", " S ", " S "]),
+  toolRecipe("stone_axe", "돌 도끼", "stone", 131, ["CC", "CS", " S"]),
+  toolRecipe("stone_shovel", "돌 삽", "stone", 131, ["C", "S"], 2),
+  toolRecipe("iron_pickaxe", "철 곡괭이", "iron_ingot", 250, ["III", " S ", " S "]),
+  toolRecipe("diamond_pickaxe", "다이아몬드 곡괭이", "diamond", 1561, ["DDD", " S ", " S "]),
+  swordRecipe("wooden_sword", "나무 검", "planks", 59),
+  swordRecipe("stone_sword", "돌 검", "stone", 131),
+  swordRecipe("copper_sword", "구리 검", "copper_ingot", 191),
+  swordRecipe("iron_sword", "철 검", "iron_ingot", 250),
+  swordRecipe("golden_sword", "금 검", "gold_ingot", 32),
+  swordRecipe("diamond_sword", "다이아몬드 검", "diamond", 1561),
   {
-    id: "wooden_pickaxe",
-    name: "나무 곡괭이",
+    id: "bow",
+    name: "활",
     size: 3,
     type: "shaped",
-    pattern: ["PPP", " S ", " S "],
-    key: { P: "planks", S: "stick" },
-    result: { item: "wooden_pickaxe", count: 1, durability: 59 },
+    pattern: [" ST", "S T", " ST"],
+    key: { S: "stick", T: "string" },
+    result: { item: "bow", count: 1, durability: 384 },
     category: "equipment",
-    unlocksBy: ["planks", "stick"]
+    unlocksBy: ["stick", "string"]
   },
   {
-    id: "wooden_axe",
-    name: "나무 도끼",
+    id: "arrow",
+    name: "화살",
     size: 3,
     type: "shaped",
-    pattern: ["PP", "PS", " S"],
-    key: { P: "planks", S: "stick" },
-    result: { item: "wooden_axe", count: 1, durability: 59 },
+    pattern: ["F", "S", "E"],
+    key: { F: "flint", S: "stick", E: "feather" },
+    result: { item: "arrow", count: 4 },
     category: "equipment",
-    unlocksBy: ["planks", "stick"]
+    unlocksBy: ["flint", "feather"]
   },
   {
-    id: "wooden_shovel",
-    name: "나무 삽",
+    id: "shield",
+    name: "방패",
+    size: 3,
+    type: "shaped",
+    pattern: ["PIP", "PPP", " P "],
+    key: { P: "planks", I: "iron_ingot" },
+    result: { item: "shield", count: 1, durability: 336 },
+    category: "equipment",
+    unlocksBy: ["iron_ingot", "planks"]
+  },
+  {
+    id: "shears",
+    name: "가위",
     size: 2,
     type: "shaped",
-    pattern: ["P", "S"],
-    key: { P: "planks", S: "stick" },
-    result: { item: "wooden_shovel", count: 1, durability: 59 },
+    pattern: [" I", "I "],
+    key: { I: "iron_ingot" },
+    result: { item: "shears", count: 1, durability: 238 },
     category: "equipment",
-    unlocksBy: ["planks", "stick"]
-  },
-  {
-    id: "stone_pickaxe",
-    name: "돌 곡괭이",
-    size: 3,
-    type: "shaped",
-    pattern: ["CCC", " S ", " S "],
-    key: { C: "stone", S: "stick" },
-    result: { item: "stone_pickaxe", count: 1, durability: 131 },
-    category: "equipment",
-    unlocksBy: ["stone", "stick"]
-  },
-  {
-    id: "stone_axe",
-    name: "돌 도끼",
-    size: 3,
-    type: "shaped",
-    pattern: ["CC", "CS", " S"],
-    key: { C: "stone", S: "stick" },
-    result: { item: "stone_axe", count: 1, durability: 131 },
-    category: "equipment",
-    unlocksBy: ["stone", "stick"]
-  },
-  {
-    id: "stone_shovel",
-    name: "돌 삽",
-    size: 2,
-    type: "shaped",
-    pattern: ["C", "S"],
-    key: { C: "stone", S: "stick" },
-    result: { item: "stone_shovel", count: 1, durability: 131 },
-    category: "equipment",
-    unlocksBy: ["stone", "stick"]
-  },
-  {
-    id: "iron_pickaxe",
-    name: "철 곡괭이",
-    size: 3,
-    type: "shaped",
-    pattern: ["III", " S ", " S "],
-    key: { I: "iron_ingot", S: "stick" },
-    result: { item: "iron_pickaxe", count: 1, durability: 250 },
-    category: "equipment",
-    unlocksBy: ["iron_ingot", "stick"]
-  },
-  {
-    id: "diamond_pickaxe",
-    name: "다이아몬드 곡괭이",
-    size: 3,
-    type: "shaped",
-    pattern: ["DDD", " S ", " S "],
-    key: { D: "diamond", S: "stick" },
-    result: { item: "diamond_pickaxe", count: 1, durability: 1561 },
-    category: "equipment",
-    unlocksBy: ["diamond", "stick"]
+    unlocksBy: ["iron_ingot"]
   },
   {
     id: "torch",
@@ -169,6 +139,17 @@ export const RECIPES: Recipe[] = [
     unlocksBy: ["planks"]
   },
   {
+    id: "bed",
+    name: "침대",
+    size: 3,
+    type: "shaped",
+    pattern: ["WWW", "PPP"],
+    key: { W: "wool", P: "planks" },
+    result: { item: "bed", count: 1 },
+    category: "items",
+    unlocksBy: ["wool", "planks"]
+  },
+  {
     id: "brick_block",
     name: "벽돌 블록",
     size: 2,
@@ -190,6 +171,81 @@ export const RECIPES: Recipe[] = [
     unlocksBy: ["apple"]
   }
 ];
+
+export const RECIPES: Recipe[] = [
+  ...BASE_RECIPES,
+  ...armorSet("leather", "가죽", "leather"),
+  ...armorSet("copper", "구리", "copper_ingot"),
+  ...armorSet("iron", "철", "iron_ingot"),
+  ...armorSet("golden", "금", "gold_ingot"),
+  ...armorSet("diamond", "다이아몬드", "diamond")
+];
+
+function toolRecipe(
+  id: ItemId,
+  name: string,
+  material: ItemId,
+  durability: number,
+  pattern: string[],
+  size: 2 | 3 = 3
+): Recipe {
+  const keyLetter = pattern.join("").replace(/[ S]/g, "")[0] ?? "M";
+  return {
+    id,
+    name,
+    size,
+    type: "shaped",
+    pattern,
+    key: { [keyLetter]: material, S: "stick" },
+    result: { item: id, count: 1, durability },
+    category: "equipment",
+    unlocksBy: [material, "stick"]
+  };
+}
+
+function swordRecipe(id: ItemId, name: string, material: ItemId, durability: number): Recipe {
+  return {
+    id,
+    name,
+    size: 3,
+    type: "shaped",
+    pattern: ["M", "M", "S"],
+    key: { M: material, S: "stick" },
+    result: { item: id, count: 1, durability },
+    category: "equipment",
+    unlocksBy: [material, "stick"]
+  };
+}
+
+function armorSet(prefix: string, label: string, material: ItemId): Recipe[] {
+  const ids = {
+    helmet: `${prefix}_helmet` as ItemId,
+    chestplate: `${prefix}_chestplate` as ItemId,
+    leggings: `${prefix}_leggings` as ItemId,
+    boots: `${prefix}_boots` as ItemId
+  };
+
+  return [
+    armorRecipe(ids.helmet, `${label} 투구`, material, ["MMM", "M M"]),
+    armorRecipe(ids.chestplate, `${label} 흉갑`, material, ["M M", "MMM", "MMM"]),
+    armorRecipe(ids.leggings, `${label} 각반`, material, ["MMM", "M M", "M M"]),
+    armorRecipe(ids.boots, `${label} 부츠`, material, ["M M", "M M"])
+  ];
+}
+
+function armorRecipe(id: ItemId, name: string, material: ItemId, pattern: string[]): Recipe {
+  return {
+    id,
+    name,
+    size: 3,
+    type: "shaped",
+    pattern,
+    key: { M: material },
+    result: { item: id, count: 1 },
+    category: "equipment",
+    unlocksBy: [material]
+  };
+}
 
 export function recipeIsUnlocked(recipe: Recipe, unlocked: Set<string>, inventory: InventoryState): boolean {
   if (unlocked.has(recipe.id)) {

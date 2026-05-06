@@ -2,7 +2,7 @@ import * as THREE from "three";
 import { TileId } from "./blocks";
 
 const TILE_SIZE = 32;
-const COLUMNS = 5;
+const COLUMNS = 6;
 const ROWS = 5;
 const ATLAS_WIDTH = COLUMNS * TILE_SIZE;
 const ATLAS_HEIGHT = ROWS * TILE_SIZE;
@@ -234,6 +234,32 @@ function drawTorch(ctx: CanvasRenderingContext2D): void {
   ctx.fillRect(ox + 13, oy + 2, 7, 7);
 }
 
+function drawGravel(ctx: CanvasRenderingContext2D): void {
+  drawDitheredTile(ctx, TileId.Gravel, { r: 120, g: 122, b: 120 }, 44, 2);
+  const [ox, oy] = tileOrigin(TileId.Gravel);
+
+  for (let index = 0; index < 18; index += 1) {
+    const x = Math.floor(pseudoNoise(TileId.Gravel, index, 5) * 28) + 2;
+    const y = Math.floor(pseudoNoise(TileId.Gravel, index, 13) * 28) + 2;
+    const bright = index % 3 === 0 ? "rgba(210, 210, 198, 0.38)" : "rgba(38, 38, 38, 0.34)";
+    ctx.fillStyle = bright;
+    ctx.fillRect(ox + x, oy + y, 3 + (index % 2), 3);
+  }
+}
+
+function drawBed(ctx: CanvasRenderingContext2D): void {
+  const [ox, oy] = tileOrigin(TileId.Bed);
+  drawDitheredTile(ctx, TileId.Bed, { r: 178, g: 74, b: 67 }, 20, 2);
+  ctx.fillStyle = "#e8e0d2";
+  ctx.fillRect(ox + 4, oy + 4, 24, 9);
+  ctx.fillStyle = "#8b2d2d";
+  ctx.fillRect(ox + 4, oy + 13, 24, 13);
+  ctx.fillStyle = "rgba(45, 20, 18, 0.45)";
+  ctx.fillRect(ox + 4, oy + 25, 24, 3);
+  ctx.fillStyle = "rgba(255, 255, 255, 0.24)";
+  ctx.fillRect(ox + 8, oy + 16, 14, 2);
+}
+
 export function createTextureAtlas(): THREE.CanvasTexture {
   const canvas = document.createElement("canvas");
   canvas.width = ATLAS_WIDTH;
@@ -271,6 +297,8 @@ export function createTextureAtlas(): THREE.CanvasTexture {
   drawFurnace(ctx, TileId.FurnaceSide, false);
   drawChest(ctx);
   drawTorch(ctx);
+  drawGravel(ctx);
+  drawBed(ctx);
 
   const texture = new THREE.CanvasTexture(canvas);
   texture.magFilter = THREE.NearestFilter;

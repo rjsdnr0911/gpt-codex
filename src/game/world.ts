@@ -16,7 +16,7 @@ import { clamp, chunkCoord, hash3, localCoord, mulberry32, seedToInt } from "./m
 import { type SavedBlock } from "./saveSystem";
 import { pushTileUvs, type VoxelMaterials } from "./textureAtlas";
 
-export const WORLDGEN_VERSION = 3;
+export const WORLDGEN_VERSION = 4;
 
 interface FaceDefinition {
   name: FaceName;
@@ -275,7 +275,7 @@ export class World {
 
     if (y === height) {
       if (height <= WATER_LEVEL + 1) {
-        return BlockType.Sand;
+        return hash3(this.seedInt ^ 0x6b7a, x, y, z) < 0.18 ? BlockType.Gravel : BlockType.Sand;
       }
 
       if (height > WORLD_HEIGHT - 18 && hash3(this.seedInt, x, y, z) > 0.62) {
@@ -286,7 +286,11 @@ export class World {
     }
 
     if (y > height - 4) {
-      return height <= WATER_LEVEL + 1 ? BlockType.Sand : BlockType.Dirt;
+      if (height <= WATER_LEVEL + 1) {
+        return hash3(this.seedInt ^ 0x67a71, x, y, z) < 0.22 ? BlockType.Gravel : BlockType.Sand;
+      }
+
+      return BlockType.Dirt;
     }
 
     if (this.worldgenVersion < WORLDGEN_VERSION) {
@@ -666,6 +670,7 @@ class Chunk {
     this.placeGlobal(x + 2, baseY, z + 1, BlockType.CraftingTable, true);
     this.placeGlobal(x - 2, baseY, z + 1, BlockType.Chest, true);
     this.placeGlobal(x, baseY, z + 2, BlockType.Furnace, true);
+    this.placeGlobal(x - 2, baseY, z - 1, BlockType.Bed, true);
     this.placeGlobal(x + 1, baseY + 1, z - 2, BlockType.Torch, true);
   }
 

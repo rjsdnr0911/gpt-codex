@@ -34,6 +34,38 @@ export const SMELTING_RECIPES: SmeltingRecipe[] = [
     fuel: "coal",
     result: { item: "gold_ingot", count: 1 },
     seconds: 10
+  },
+  {
+    id: "cook_beef",
+    name: "스테이크 굽기",
+    input: "raw_beef",
+    fuel: "coal",
+    result: { item: "steak", count: 1 },
+    seconds: 10
+  },
+  {
+    id: "cook_porkchop",
+    name: "돼지고기 굽기",
+    input: "raw_porkchop",
+    fuel: "coal",
+    result: { item: "cooked_porkchop", count: 1 },
+    seconds: 10
+  },
+  {
+    id: "cook_mutton",
+    name: "양고기 굽기",
+    input: "raw_mutton",
+    fuel: "coal",
+    result: { item: "cooked_mutton", count: 1 },
+    seconds: 10
+  },
+  {
+    id: "cook_chicken",
+    name: "닭고기 굽기",
+    input: "raw_chicken",
+    fuel: "coal",
+    result: { item: "cooked_chicken", count: 1 },
+    seconds: 10
   }
 ];
 
