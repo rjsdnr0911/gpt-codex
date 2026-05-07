@@ -2,6 +2,16 @@ import { BLOCKS, BlockType } from "../game/blocks";
 import { HOTBAR_START, InventoryState } from "../game/inventory";
 import { EquipmentSlot, ITEM_DEFINITIONS, ItemId, ItemStack, ToolKind, ToolTier } from "../game/items";
 import { Recipe } from "../game/recipes";
+import {
+  DimensionId,
+  getActiveMainQuest,
+  getTrackedSideQuests,
+  QUESTS,
+  QuestDefinition,
+  QuestState,
+  questItemUsage,
+  questProgressText
+} from "../game/quests";
 import { SmeltingRecipe } from "../game/smelting";
 import { SurvivalState } from "../game/survival";
 
@@ -69,6 +79,8 @@ export interface HudStats {
   recipes: RecipeView[];
   craftingGrid: Array<ItemStack | null>;
   craftingResult: ItemStack | null;
+  questState: QuestState;
+  dimension: DimensionId;
   smeltingRecipes: Array<{ recipe: SmeltingRecipe; smeltable: boolean }>;
 }
 
@@ -89,6 +101,7 @@ export class Hud {
   private readonly hungerRow: HTMLDivElement;
   private readonly airRow: HTMLDivElement;
   private readonly hotbar: HTMLDivElement;
+  private readonly questTracker: HTMLDivElement;
   private readonly toast: HTMLDivElement;
 
   private mode: HudMode = "title";
@@ -152,10 +165,13 @@ export class Hud {
     this.hotbar = document.createElement("div");
     this.hotbar.className = "hotbar survival-hotbar";
 
+    this.questTracker = document.createElement("div");
+    this.questTracker.className = "quest-tracker";
+
     this.toast = document.createElement("div");
     this.toast.className = "toast";
 
-    this.hudLayer.append(topBar, this.reticle, mining, this.itemName, statusBars, this.hotbar, this.toast);
+    this.hudLayer.append(topBar, this.reticle, mining, this.itemName, statusBars, this.hotbar, this.questTracker, this.toast);
 
     this.menuLayer = document.createElement("div");
     this.menuLayer.className = "menu-layer";
@@ -196,10 +212,26 @@ export class Hud {
   showToast(message: string): void {
     window.clearTimeout(this.toastTimer);
     this.toast.textContent = message;
+    this.toast.classList.remove("quest-toast");
     this.toast.classList.add("visible");
     this.toastTimer = window.setTimeout(() => {
       this.toast.classList.remove("visible");
     }, 1800);
+  }
+
+  showQuestToast(title: string, description: string, reward: string): void {
+    window.clearTimeout(this.toastTimer);
+    const titleEl = document.createElement("strong");
+    titleEl.textContent = title;
+    const descEl = document.createElement("span");
+    descEl.textContent = description;
+    const rewardEl = document.createElement("em");
+    rewardEl.textContent = reward;
+    this.toast.replaceChildren(titleEl, descEl, rewardEl);
+    this.toast.classList.add("visible", "quest-toast");
+    this.toastTimer = window.setTimeout(() => {
+      this.toast.classList.remove("visible", "quest-toast");
+    }, 3200);
   }
 
   private render(): void {
@@ -232,6 +264,43 @@ export class Hud {
     this.renderIconRow(this.hungerRow, "hunger", this.stats.survival.hunger);
     this.renderIconRow(this.airRow, "air", this.stats.survival.air);
     this.renderHotbar();
+    this.renderQuestTracker();
+  }
+
+  private renderQuestTracker(): void {
+    if (!this.stats || this.mode !== "playing") {
+      this.questTracker.hidden = true;
+      return;
+    }
+
+    const mainQuest = getActiveMainQuest(this.stats.questState);
+    const sideQuests = getTrackedSideQuests(this.stats.questState);
+    this.questTracker.hidden = !mainQuest && sideQuests.length === 0;
+    this.questTracker.innerHTML = "";
+
+    const title = document.createElement("div");
+    title.className = "quest-tracker-title";
+    title.textContent = "현재 목표";
+    this.questTracker.append(title);
+
+    if (mainQuest) {
+      this.questTracker.append(this.makeQuestTrackerLine(mainQuest, true));
+    }
+
+    for (const quest of sideQuests) {
+      this.questTracker.append(this.makeQuestTrackerLine(quest, false));
+    }
+  }
+
+  private makeQuestTrackerLine(quest: QuestDefinition, main: boolean): HTMLElement {
+    const line = document.createElement("div");
+    line.className = `quest-tracker-line ${main ? "main" : ""}`;
+    const label = document.createElement("strong");
+    label.textContent = quest.titleKo;
+    const progress = document.createElement("span");
+    progress.textContent = questProgressText(quest, this.stats!.questState);
+    line.append(label, progress);
+    return line;
   }
 
   private renderMenu(): void {
@@ -456,6 +525,7 @@ export class Hud {
       recipeBook.append(button);
     }
 
+    const questJournal = this.makeQuestJournal();
     const catalog = this.makeItemCatalog(gridSize);
 
     const playerPaper = document.createElement("div");
@@ -518,8 +588,71 @@ export class Hud {
       cursor.append(this.makeItemIcon(stats.inventory.cursor), this.makeCount(stats.inventory.cursor.count));
     }
 
-    panel.append(title, recipeBook, playerPaper, craftingArea, storage, hotbar, catalog, cursor, tooltip);
+    panel.append(title, questJournal, recipeBook, playerPaper, craftingArea, storage, hotbar, catalog, cursor, tooltip);
     return panel;
+  }
+
+  private makeQuestJournal(): HTMLElement {
+    const wrap = document.createElement("div");
+    wrap.className = "quest-journal";
+    const title = document.createElement("div");
+    title.className = "quest-journal-title";
+    title.textContent = "모험 일지";
+    wrap.append(title);
+
+    if (!this.stats) {
+      return wrap;
+    }
+
+    const main = getActiveMainQuest(this.stats.questState);
+    if (main) {
+      wrap.append(this.makeJournalQuest(main, "메인"));
+    }
+
+    for (const quest of getTrackedSideQuests(this.stats.questState)) {
+      wrap.append(this.makeJournalQuest(quest, this.categoryLabel(quest)));
+    }
+
+    const roadmap = QUESTS.filter((quest) => quest.future).slice(0, 4);
+    const roadmapTitle = document.createElement("div");
+    roadmapTitle.className = "quest-roadmap-title";
+    roadmapTitle.textContent = "이후 로드맵";
+    wrap.append(roadmapTitle);
+    for (const quest of roadmap) {
+      wrap.append(this.makeJournalQuest(quest, "예고"));
+    }
+
+    return wrap;
+  }
+
+  private makeJournalQuest(quest: QuestDefinition, labelText: string): HTMLElement {
+    const entry = document.createElement("div");
+    entry.className = `quest-journal-entry ${quest.future ? "future" : ""}`;
+    const head = document.createElement("div");
+    const label = document.createElement("span");
+    label.className = "quest-label";
+    label.textContent = labelText;
+    const title = document.createElement("strong");
+    title.textContent = quest.titleKo;
+    head.append(label, title);
+    const desc = document.createElement("p");
+    desc.textContent = quest.descriptionKo;
+    const progress = document.createElement("span");
+    progress.className = "quest-progress-text";
+    progress.textContent = quest.future ? "다음 대형 업데이트에서 실제 콘텐츠 확장 예정" : questProgressText(quest, this.stats!.questState);
+    entry.append(head, desc, progress);
+    return entry;
+  }
+
+  private categoryLabel(quest: QuestDefinition): string {
+    const labels: Record<string, string> = {
+      side: "사이드",
+      combat: "전투",
+      exploration: "탐험",
+      crafting: "제작",
+      main: "메인"
+    };
+    return labels[quest.category] ?? "사이드";
   }
 
   private makeFurnacePanel(): HTMLElement {
@@ -711,7 +844,26 @@ export class Hud {
       detail.append(sourceRow);
     }
 
-    if (recipes.length === 0 && smelting.length === 0 && sources.length === 0) {
+    const relatedQuests = questItemUsage(item.id);
+    if (relatedQuests.length > 0) {
+      detail.append(this.makeCatalogSectionTitle("관련 퀘스트"));
+      const questList = document.createElement("div");
+      questList.className = "catalog-quest-list";
+      for (const quest of relatedQuests.slice(0, 4)) {
+        const chip = this.makeCatalogChip(`${quest.future ? "예고" : this.categoryLabel(quest)} · ${quest.titleKo}`);
+        questList.append(chip);
+      }
+      detail.append(questList);
+
+      const nextUse = document.createElement("div");
+      nextUse.className = "catalog-next-use";
+      nextUse.textContent = relatedQuests[0].future
+        ? "다음 사용처: 이후 엔딩 루프 콘텐츠에서 이어집니다."
+        : `다음 사용처: ${relatedQuests[0].descriptionKo}`;
+      detail.append(nextUse);
+    }
+
+    if (recipes.length === 0 && smelting.length === 0 && sources.length === 0 && relatedQuests.length === 0) {
       const noRecipe = document.createElement("div");
       noRecipe.className = "catalog-empty";
       noRecipe.textContent = "아직 제작법은 없지만, 월드 탐험이나 다음 시스템에서 쓰일 수 있는 구현된 아이템입니다.";
@@ -869,7 +1021,11 @@ export class Hud {
       raw_chicken: ["닭"],
       feather: ["닭"],
       egg: ["닭"],
-      flint: ["자갈"]
+      flint: ["자갈"],
+      bucket: ["제작", "상자 보급"],
+      water_bucket: ["양동이로 물 담기"],
+      lava_bucket: ["양동이로 용암 담기"],
+      flint_and_steel: ["제작"]
     };
     return [...blockSources, ...(mobSources[item] ?? [])];
   }
@@ -1213,7 +1369,10 @@ export class Hud {
     const smelting = stats.smeltingRecipes
       .map((entry) => `${entry.recipe.id}:${entry.smeltable ? 1 : 0}`)
       .join("|");
-    return `${this.mode}|${slots}|${armor}|${offhand}|${cursor}|${crafting}|${result}|${recipes}|${smelting}`;
+    const quests = `${stats.dimension}|${stats.questState.activeMainQuestId ?? "-"}|${stats.questState.trackedSideQuestIds.join(",")}|${stats.questState.completed.join(",")}|${Object.entries(stats.questState.progress)
+      .map(([key, value]) => `${key}:${value}`)
+      .join(",")}`;
+    return `${this.mode}|${slots}|${armor}|${offhand}|${cursor}|${crafting}|${result}|${recipes}|${smelting}|${quests}`;
   }
 
   private numberFromEvent(event: MouseEvent): number | null {

@@ -28,7 +28,12 @@ export const enum BlockType {
   Chest = 21,
   Torch = 22,
   Gravel = 23,
-  Bed = 24
+  Bed = 24,
+  Lava = 25,
+  Obsidian = 26,
+  Fire = 27,
+  NetherPortal = 28,
+  RuinedPortalDebris = 29
 }
 
 export type BlockId =
@@ -56,7 +61,12 @@ export type BlockId =
   | "chest"
   | "torch"
   | "gravel"
-  | "bed";
+  | "bed"
+  | "lava"
+  | "obsidian"
+  | "fire"
+  | "nether_portal"
+  | "ruined_portal_debris";
 
 export const enum TileId {
   GrassTop = 0,
@@ -85,7 +95,12 @@ export const enum TileId {
   Chest = 23,
   Torch = 24,
   Gravel = 25,
-  Bed = 26
+  Bed = 26,
+  Lava = 27,
+  Obsidian = 28,
+  Fire = 29,
+  NetherPortal = 30,
+  RuinedPortalDebris = 31
 }
 
 export type FaceName = "top" | "bottom" | "north" | "south" | "east" | "west";
@@ -488,6 +503,69 @@ export const BLOCKS: Record<BlockType, BlockDefinition> = {
     preferredTool: "axe",
     placeableItem: "bed",
     interactable: "bed"
+  },
+  [BlockType.Lava]: {
+    id: "lava",
+    displayName: "용암",
+    solid: false,
+    transparent: true,
+    fluid: false,
+    swatch: "#e86a2b",
+    tiles: allFaces(TileId.Lava),
+    hardness: 100,
+    drops: null
+  },
+  [BlockType.Obsidian]: {
+    id: "obsidian",
+    displayName: "흑요석",
+    solid: true,
+    transparent: false,
+    fluid: false,
+    swatch: "#211a31",
+    tiles: allFaces(TileId.Obsidian),
+    hardness: 70,
+    drops: "obsidian",
+    preferredTool: "pickaxe",
+    requiredTool: "pickaxe",
+    requiredTier: "diamond",
+    placeableItem: "obsidian"
+  },
+  [BlockType.Fire]: {
+    id: "fire",
+    displayName: "불",
+    solid: false,
+    transparent: true,
+    fluid: false,
+    swatch: "#ff9c2e",
+    tiles: allFaces(TileId.Fire),
+    hardness: 0.1,
+    drops: null
+  },
+  [BlockType.NetherPortal]: {
+    id: "nether_portal",
+    displayName: "지옥문",
+    solid: false,
+    transparent: true,
+    fluid: false,
+    swatch: "#7143d9",
+    tiles: allFaces(TileId.NetherPortal),
+    hardness: 100,
+    drops: null
+  },
+  [BlockType.RuinedPortalDebris]: {
+    id: "ruined_portal_debris",
+    displayName: "폐허 포털 잔해",
+    solid: true,
+    transparent: false,
+    fluid: false,
+    swatch: "#2f263a",
+    tiles: allFaces(TileId.RuinedPortalDebris),
+    hardness: 18,
+    drops: "obsidian",
+    preferredTool: "pickaxe",
+    requiredTool: "pickaxe",
+    requiredTier: "diamond",
+    placeableItem: "obsidian"
   }
 };
 

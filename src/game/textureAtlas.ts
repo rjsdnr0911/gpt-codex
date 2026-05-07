@@ -3,7 +3,7 @@ import { TileId } from "./blocks";
 
 const TILE_SIZE = 32;
 const COLUMNS = 6;
-const ROWS = 5;
+const ROWS = 6;
 const ATLAS_WIDTH = COLUMNS * TILE_SIZE;
 const ATLAS_HEIGHT = ROWS * TILE_SIZE;
 
@@ -260,6 +260,81 @@ function drawBed(ctx: CanvasRenderingContext2D): void {
   ctx.fillRect(ox + 8, oy + 16, 14, 2);
 }
 
+function drawLava(ctx: CanvasRenderingContext2D): void {
+  drawDitheredTile(ctx, TileId.Lava, { r: 214, g: 76, b: 28 }, 42, 2);
+  const [ox, oy] = tileOrigin(TileId.Lava);
+  ctx.strokeStyle = "rgba(255, 220, 88, 0.72)";
+  ctx.lineWidth = 3;
+
+  for (let y = 5; y < TILE_SIZE; y += 8) {
+    ctx.beginPath();
+    ctx.moveTo(ox + 1, oy + y);
+    for (let x = 1; x <= TILE_SIZE; x += 5) {
+      ctx.lineTo(ox + x, oy + y + Math.sin((x + y) * 0.42) * 2.5);
+    }
+    ctx.stroke();
+  }
+
+  ctx.fillStyle = "rgba(255, 237, 117, 0.65)";
+  ctx.fillRect(ox + 8, oy + 9, 5, 5);
+  ctx.fillRect(ox + 21, oy + 20, 4, 4);
+}
+
+function drawObsidian(ctx: CanvasRenderingContext2D, tile: TileId): void {
+  drawDitheredTile(ctx, tile, { r: 34, g: 27, b: 50 }, 32, 2);
+  const [ox, oy] = tileOrigin(tile);
+  ctx.strokeStyle = "rgba(128, 86, 190, 0.36)";
+  ctx.lineWidth = 1;
+
+  for (let line = 0; line < 9; line += 1) {
+    const startX = Math.floor(pseudoNoise(tile, line, 19) * TILE_SIZE);
+    const startY = Math.floor(pseudoNoise(tile, line, 31) * TILE_SIZE);
+    ctx.beginPath();
+    ctx.moveTo(ox + startX, oy + startY);
+    ctx.lineTo(ox + startX + (pseudoNoise(tile, line, 7) - 0.5) * 22, oy + startY + 10);
+    ctx.stroke();
+  }
+}
+
+function drawFire(ctx: CanvasRenderingContext2D): void {
+  const [ox, oy] = tileOrigin(TileId.Fire);
+  ctx.clearRect(ox, oy, TILE_SIZE, TILE_SIZE);
+  ctx.fillStyle = "rgba(255, 220, 66, 0.82)";
+  ctx.beginPath();
+  ctx.moveTo(ox + 7, oy + 28);
+  ctx.lineTo(ox + 13, oy + 8);
+  ctx.lineTo(ox + 18, oy + 18);
+  ctx.lineTo(ox + 23, oy + 4);
+  ctx.lineTo(ox + 27, oy + 28);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = "rgba(255, 102, 36, 0.86)";
+  ctx.beginPath();
+  ctx.moveTo(ox + 4, oy + 30);
+  ctx.lineTo(ox + 10, oy + 12);
+  ctx.lineTo(ox + 16, oy + 24);
+  ctx.lineTo(ox + 21, oy + 10);
+  ctx.lineTo(ox + 29, oy + 30);
+  ctx.closePath();
+  ctx.fill();
+}
+
+function drawPortal(ctx: CanvasRenderingContext2D): void {
+  drawDitheredTile(ctx, TileId.NetherPortal, { r: 83, g: 45, b: 176 }, 50, 2);
+  const [ox, oy] = tileOrigin(TileId.NetherPortal);
+  ctx.strokeStyle = "rgba(230, 196, 255, 0.54)";
+  ctx.lineWidth = 2;
+
+  for (let x = 4; x < TILE_SIZE; x += 8) {
+    ctx.beginPath();
+    ctx.moveTo(ox + x, oy + 2);
+    for (let y = 2; y < TILE_SIZE; y += 5) {
+      ctx.lineTo(ox + x + Math.sin((y + x) * 0.35) * 3, oy + y);
+    }
+    ctx.stroke();
+  }
+}
+
 export function createTextureAtlas(): THREE.CanvasTexture {
   const canvas = document.createElement("canvas");
   canvas.width = ATLAS_WIDTH;
@@ -299,6 +374,11 @@ export function createTextureAtlas(): THREE.CanvasTexture {
   drawTorch(ctx);
   drawGravel(ctx);
   drawBed(ctx);
+  drawLava(ctx);
+  drawObsidian(ctx, TileId.Obsidian);
+  drawFire(ctx);
+  drawPortal(ctx);
+  drawObsidian(ctx, TileId.RuinedPortalDebris);
 
   const texture = new THREE.CanvasTexture(canvas);
   texture.magFilter = THREE.NearestFilter;

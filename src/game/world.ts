@@ -16,7 +16,7 @@ import { clamp, chunkCoord, hash3, localCoord, mulberry32, seedToInt } from "./m
 import { type SavedBlock } from "./saveSystem";
 import { pushTileUvs, type VoxelMaterials } from "./textureAtlas";
 
-export const WORLDGEN_VERSION = 4;
+export const WORLDGEN_VERSION = 5;
 
 interface FaceDefinition {
   name: FaceName;
@@ -302,6 +302,10 @@ export class World {
     }
 
     if (this.isCave(x, y, z, height)) {
+      if (y < 12 && hash3(this.seedInt ^ 0x1a7a, x, y, z) < 0.12) {
+        return BlockType.Lava;
+      }
+
       return y < WATER_LEVEL - 10 && hash3(this.seedInt ^ 0x3a0a, x, y, z) < 0.075 ? BlockType.Water : BlockType.Air;
     }
 
@@ -630,6 +634,10 @@ class Chunk {
       this.placeCabin(centerX, centerZ);
     } else if (surfaceRoll < 0.04) {
       this.placeRuinedCamp(centerX, centerZ);
+    } else if (surfaceRoll < 0.052) {
+      this.placeLavaPool(centerX, centerZ);
+    } else if (surfaceRoll < 0.064) {
+      this.placeRuinedPortal(centerX, centerZ);
     }
 
     if (undergroundRoll < 0.035) {
@@ -693,6 +701,63 @@ class Chunk {
     this.placeGlobal(x - 1, baseY, z + 1, BlockType.Chest, true);
     this.placeGlobal(x + 1, baseY, z, BlockType.Furnace, true);
     this.placeGlobal(x, baseY, z, BlockType.Torch, true);
+  }
+
+  private placeLavaPool(x: number, z: number): void {
+    const baseY = this.world.terrainHeight(x, z) + 1;
+    if (baseY <= WATER_LEVEL + 3 || baseY >= WORLD_HEIGHT - 8) {
+      return;
+    }
+
+    for (let dz = -3; dz <= 3; dz += 1) {
+      for (let dx = -3; dx <= 3; dx += 1) {
+        const distance = Math.hypot(dx, dz);
+        if (distance > 3.2) {
+          continue;
+        }
+
+        this.placeGlobal(x + dx, baseY - 1, z + dz, distance < 2.1 ? BlockType.Obsidian : BlockType.Stone, true);
+        this.placeGlobal(x + dx, baseY, z + dz, distance < 1.9 ? BlockType.Lava : BlockType.Gravel, true);
+        if (distance < 2.4) {
+          this.placeGlobal(x + dx, baseY + 1, z + dz, BlockType.Air, true);
+        }
+      }
+    }
+  }
+
+  private placeRuinedPortal(x: number, z: number): void {
+    const baseY = this.world.terrainHeight(x, z) + 1;
+    if (baseY <= WATER_LEVEL + 2 || baseY >= WORLD_HEIGHT - 9) {
+      return;
+    }
+
+    for (let dz = -2; dz <= 2; dz += 1) {
+      for (let dx = -2; dx <= 2; dx += 1) {
+        const block = Math.abs(dx) === 2 || Math.abs(dz) === 2 ? BlockType.RuinedPortalDebris : BlockType.Gravel;
+        this.placeGlobal(x + dx, baseY - 1, z + dz, block, true);
+        this.placeGlobal(x + dx, baseY, z + dz, BlockType.Air, true);
+      }
+    }
+
+    for (let y = 0; y <= 4; y += 1) {
+      this.placeGlobal(x - 1, baseY + y, z, y === 2 ? BlockType.RuinedPortalDebris : BlockType.Obsidian, true);
+      if (y !== 3) {
+        this.placeGlobal(x + 2, baseY + y, z, y === 1 ? BlockType.RuinedPortalDebris : BlockType.Obsidian, true);
+      }
+    }
+
+    for (let dx = -1; dx <= 2; dx += 1) {
+      if (dx !== 1) {
+        this.placeGlobal(x + dx, baseY, z, BlockType.Obsidian, true);
+      }
+      if (dx !== 0) {
+        this.placeGlobal(x + dx, baseY + 4, z, BlockType.Obsidian, true);
+      }
+    }
+
+    this.placeGlobal(x + 1, baseY, z - 1, BlockType.Chest, true);
+    this.placeGlobal(x - 2, baseY, z + 1, BlockType.Lava, true);
+    this.placeGlobal(x + 2, baseY + 1, z + 1, BlockType.Torch, true);
   }
 
   private placeMineshaft(x: number, y: number, z: number): void {

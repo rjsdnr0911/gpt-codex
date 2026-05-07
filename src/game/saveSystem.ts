@@ -1,6 +1,7 @@
 import { del, get, set } from "idb-keyval";
 import { BlockType } from "./blocks";
 import { InventoryState } from "./inventory";
+import { DimensionId, QuestState } from "./quests";
 import { SurvivalState } from "./survival";
 
 const LEGACY_SAVE_KEY = "voxel-frontier:save:v1";
@@ -40,7 +41,7 @@ export interface SavedGameV1 {
 }
 
 export interface WorldSaveV2 {
-  version: 2 | 3;
+  version: 2 | 3 | 4;
   worldgenVersion?: number;
   id: string;
   name: string;
@@ -55,6 +56,9 @@ export interface WorldSaveV2 {
   lootedChests?: string[];
   entities?: SavedEntity[];
   gameRules?: GameRules;
+  dimension?: DimensionId;
+  quests?: QuestState;
+  milestones?: string[];
 }
 
 export type WorldSaveV3 = WorldSaveV2 & {
@@ -64,8 +68,15 @@ export type WorldSaveV3 = WorldSaveV2 & {
   gameRules: GameRules;
 };
 
+export type WorldSaveV4 = WorldSaveV2 & {
+  version: 4;
+  dimension: DimensionId;
+  quests: QuestState;
+  milestones: string[];
+};
+
 export interface SaveIndexV2 {
-  version: 2 | 3;
+  version: 2 | 3 | 4;
   activeWorldId: string | null;
   worlds: WorldSaveV2[];
 }
@@ -74,7 +85,7 @@ export class SaveSystem {
   async loadIndex(): Promise<SaveIndexV2> {
     const index = await get<SaveIndexV2>(SAVE_INDEX_KEY);
 
-    if (index?.version === 2 || index?.version === 3) {
+    if (index?.version === 2 || index?.version === 3 || index?.version === 4) {
       return index;
     }
 
@@ -82,14 +93,14 @@ export class SaveSystem {
 
     if (legacy?.version === 1) {
       return {
-        version: 3,
+        version: 4,
         activeWorldId: "legacy-world",
         worlds: []
       };
     }
 
     return {
-      version: 3,
+      version: 4,
       activeWorldId: null,
       worlds: []
     };
@@ -114,7 +125,7 @@ export class SaveSystem {
       index.worlds.unshift(world);
     }
 
-    index.version = 3;
+    index.version = 4;
     index.activeWorldId = world.id;
     index.worlds.sort((a, b) => b.updatedAt - a.updatedAt);
     await this.saveIndex(index);

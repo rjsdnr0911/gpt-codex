@@ -11,6 +11,7 @@ export type ItemId =
   | "sand"
   | "gravel"
   | "water"
+  | "obsidian"
   | "log"
   | "leaves"
   | "ore"
@@ -41,6 +42,10 @@ export type ItemId =
   | "chest"
   | "torch"
   | "bed"
+  | "bucket"
+  | "water_bucket"
+  | "lava_bucket"
+  | "flint_and_steel"
   | "wooden_pickaxe"
   | "stone_pickaxe"
   | "iron_pickaxe"
@@ -146,6 +151,7 @@ export const ITEM_DEFINITIONS: Record<ItemId, ItemDefinition> = {
   sand: { id: "sand", name: "모래", maxStack: 64, color: "#d4c682", placeBlock: BlockType.Sand },
   gravel: { id: "gravel", name: "자갈", maxStack: 64, color: "#7a7c7a", placeBlock: BlockType.Gravel },
   water: { id: "water", name: "물", maxStack: 64, color: "#2e9bc9", placeBlock: BlockType.Water },
+  obsidian: { id: "obsidian", name: "흑요석", maxStack: 64, color: "#211a31", placeBlock: BlockType.Obsidian },
   log: { id: "log", name: "원목", maxStack: 64, color: "#805331", placeBlock: BlockType.Log },
   leaves: { id: "leaves", name: "나뭇잎", maxStack: 64, color: "#448f50", placeBlock: BlockType.Leaves },
   ore: { id: "ore", name: "구형 광석", maxStack: 64, color: "#59bdc4", placeBlock: BlockType.Ore },
@@ -212,6 +218,16 @@ export const ITEM_DEFINITIONS: Record<ItemId, ItemDefinition> = {
   chest: { id: "chest", name: "상자", maxStack: 64, color: "#9b642f", placeBlock: BlockType.Chest },
   torch: { id: "torch", name: "횃불", maxStack: 64, color: "#f0a83c", placeBlock: BlockType.Torch },
   bed: { id: "bed", name: "침대", maxStack: 1, color: "#c94646", placeBlock: BlockType.Bed },
+  bucket: { id: "bucket", name: "양동이", maxStack: 1, color: "#bfc8c8" },
+  water_bucket: { id: "water_bucket", name: "물 양동이", maxStack: 1, color: "#4bb5e3" },
+  lava_bucket: { id: "lava_bucket", name: "용암 양동이", maxStack: 1, color: "#e86a2b" },
+  flint_and_steel: {
+    id: "flint_and_steel",
+    name: "부싯돌과 부시",
+    maxStack: 1,
+    color: "#c9d1d1",
+    durability: 64
+  },
 
   wooden_pickaxe: {
     id: "wooden_pickaxe",
@@ -495,6 +511,9 @@ export function itemFromBlock(block: BlockType): ItemId | null {
       return "gravel";
     case BlockType.Water:
       return "water";
+    case BlockType.Obsidian:
+    case BlockType.RuinedPortalDebris:
+      return "obsidian";
     case BlockType.Log:
       return "log";
     case BlockType.Leaves:

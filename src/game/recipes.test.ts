@@ -44,4 +44,17 @@ describe("recipes", () => {
     consumeRecipeGrid(grid, recipe!, 3);
     expect(grid.every((slot) => slot === null)).toBe(true);
   });
+
+  it("adds portal preparation recipes", () => {
+    const inventory = createInventoryState();
+    addStack(inventory, { item: "iron_ingot", count: 4 });
+    addStack(inventory, { item: "flint", count: 1 });
+    const bucket = RECIPES.find((entry) => entry.id === "bucket");
+    const flintAndSteel = RECIPES.find((entry) => entry.id === "flint_and_steel");
+
+    expect(bucket).toBeDefined();
+    expect(flintAndSteel).toBeDefined();
+    expect(canCraft(bucket!, inventory, 3)).toBe(true);
+    expect(canCraft(flintAndSteel!, inventory, 2)).toBe(true);
+  });
 });

@@ -106,6 +106,27 @@ const BASE_RECIPES: Recipe[] = [
     unlocksBy: ["iron_ingot"]
   },
   {
+    id: "bucket",
+    name: "양동이",
+    size: 3,
+    type: "shaped",
+    pattern: ["I I", " I "],
+    key: { I: "iron_ingot" },
+    result: { item: "bucket", count: 1 },
+    category: "items",
+    unlocksBy: ["iron_ingot"]
+  },
+  {
+    id: "flint_and_steel",
+    name: "부싯돌과 부시",
+    size: 2,
+    type: "shapeless",
+    ingredients: { iron_ingot: 1, flint: 1 },
+    result: { item: "flint_and_steel", count: 1, durability: 64 },
+    category: "equipment",
+    unlocksBy: ["iron_ingot", "flint"]
+  },
+  {
     id: "torch",
     name: "횃불",
     size: 2,

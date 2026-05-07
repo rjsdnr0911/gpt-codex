@@ -20,6 +20,8 @@ import { blockFromItem, EquipmentSlot, ITEM_DEFINITIONS, ItemId, ItemStack, maxS
 import { clamp, hash3 } from "./math";
 import { MobManager } from "./mobs";
 import { Player } from "./player";
+import { applyFluidInteractions } from "./fluids";
+import { isInPortal, tryIgnitePortal } from "./portal";
 import {
   canCraft,
   consumeRecipeGrid,
@@ -29,6 +31,16 @@ import {
   recipeIsUnlocked,
   recipeLayout
 } from "./recipes";
+import {
+  applyQuestEvent,
+  createQuestState,
+  DimensionId,
+  QuestDefinition,
+  QuestEvent,
+  QuestState,
+  normalizeQuestState,
+  syncQuestState
+} from "./quests";
 import { HandView } from "./handView";
 import { canSmelt, smelt, SMELTING_RECIPES } from "./smelting";
 import {
@@ -93,7 +105,7 @@ export class Game {
   private saving = false;
   private saveState = "준비됨";
   private mode: HudMode = "title";
-  private saveIndex: SaveIndexV2 = { version: 3, activeWorldId: null, worlds: [] };
+  private saveIndex: SaveIndexV2 = { version: 4, activeWorldId: null, worlds: [] };
   private activeWorld: WorldSaveV2 | null = null;
   private inventory: InventoryState = createInventoryState();
   private craftingGrid: Array<ItemStack | null> = Array.from({ length: 9 }, () => null);
@@ -101,6 +113,9 @@ export class Game {
   private survival!: SurvivalController;
   private unlockedRecipes = new Set<string>();
   private lootedChests = new Set<string>();
+  private questState: QuestState = createQuestState();
+  private dimension: DimensionId = "overworld";
+  private portalTimer = 0;
   private mining: MiningState | null = null;
   private selectedItemTimer = 0;
   private attackCooldown = 0;
@@ -214,7 +229,7 @@ export class Game {
 
     const migrated = this.convertLegacy(legacy);
     const next: SaveIndexV2 = {
-      version: 3,
+      version: 4,
       activeWorldId: migrated.id,
       worlds: [migrated]
     };
@@ -227,7 +242,7 @@ export class Game {
     const inventory = createInventoryState();
     const spawn = new THREE.Vector3().fromArray(legacy.player.position);
     return {
-      version: 3,
+      version: 4,
       worldgenVersion: 2,
       id: "legacy-world",
       name: "이전 월드",
@@ -241,7 +256,10 @@ export class Game {
       unlockedRecipes: [],
       lootedChests: [],
       entities: [],
-      gameRules: { mobGriefing: true }
+      gameRules: { mobGriefing: true },
+      dimension: "overworld",
+      quests: createQuestState(),
+      milestones: []
     };
   }
 
@@ -254,6 +272,9 @@ export class Game {
     this.player.pitch = -0.08;
     this.inventory = createInventoryState();
     this.survival = new SurvivalController(createSurvivalState(spawn));
+    this.dimension = "overworld";
+    this.questState = createQuestState();
+    this.portalTimer = 0;
     this.world.ensureChunksAround(this.player.position);
   }
 
@@ -267,6 +288,9 @@ export class Game {
     this.survival = new SurvivalController({ ...save.survival });
     this.unlockedRecipes = new Set(save.unlockedRecipes);
     this.lootedChests = new Set(save.lootedChests ?? []);
+    this.dimension = save.dimension ?? "overworld";
+    this.questState = normalizeQuestState(save.quests);
+    this.portalTimer = 0;
     this.mobs.restore(save.entities ?? []);
     this.world.ensureChunksAround(this.player.position);
     this.saveState = "준비됨";
@@ -299,7 +323,7 @@ export class Game {
     player.pitch = -0.08;
     const survival = createSurvivalState(spawn);
     const save: WorldSaveV2 = {
-      version: 3,
+      version: 4,
       worldgenVersion: WORLDGEN_VERSION,
       id,
       name,
@@ -313,7 +337,10 @@ export class Game {
       unlockedRecipes: [],
       lootedChests: [],
       entities: [],
-      gameRules: { mobGriefing: true }
+      gameRules: { mobGriefing: true },
+      dimension: "overworld",
+      quests: createQuestState(),
+      milestones: []
     };
     await this.saveSystem.upsertWorld(save);
     this.saveIndex = await this.saveSystem.loadIndex();
@@ -355,7 +382,7 @@ export class Game {
     player.yaw = world.findScenicYaw(spawn);
     player.pitch = -0.08;
     const save: WorldSaveV2 = {
-      version: 3,
+      version: 4,
       worldgenVersion: WORLDGEN_VERSION,
       id: `world-${now.toString(36)}-caves`,
       name: `${source.name} 동굴 복사본`,
@@ -369,7 +396,10 @@ export class Game {
       unlockedRecipes: [],
       lootedChests: [],
       entities: [],
-      gameRules: { mobGriefing: true }
+      gameRules: { mobGriefing: true },
+      dimension: "overworld",
+      quests: createQuestState(),
+      milestones: []
     };
 
     this.saveIndex = await this.saveSystem.upsertWorld(save);
@@ -582,6 +612,11 @@ export class Game {
 
     this.world.ensureChunksAround(this.player.position);
     this.selectedHit = this.raycastBlock();
+    if (this.selectedHit?.block === BlockType.Lava) {
+      this.recordQuestEvent({ type: "discover", target: "lava" });
+    } else if (this.selectedHit?.block === BlockType.RuinedPortalDebris || this.selectedHit?.block === BlockType.Obsidian) {
+      this.recordQuestEvent({ type: "discover", target: "ruined_portal" });
+    }
     this.updateHighlight();
 
     const actions = this.input.consumeActions();
@@ -607,6 +642,8 @@ export class Game {
 
     this.handleMining(delta, actions);
     this.handleUse(actions, sneaking);
+    this.updatePortalTravel(delta);
+    this.updateQuestProgress();
 
     this.survival.update(delta, this.player.isInWater(this.world), moving, wantsSprint && this.survival.canSprint());
 
@@ -646,7 +683,7 @@ export class Game {
           }
 
           const block = this.world.getBlock(bx, by, bz);
-          if (block === BlockType.Air || block === BlockType.Water) {
+          if (block === BlockType.Air || block === BlockType.Water || block === BlockType.Lava || block === BlockType.NetherPortal) {
             continue;
           }
 
@@ -670,6 +707,9 @@ export class Game {
     }
 
     this.hud.showToast(destroyed > 0 ? `크리퍼 폭발: 블록 ${destroyed}개 파괴` : "크리퍼가 폭발했습니다");
+    if (this.survival.state.alive) {
+      this.recordQuestEvent({ type: "discover", target: "creeper_survived" });
+    }
     this.queueSave();
   }
 
@@ -696,6 +736,7 @@ export class Game {
             for (const drop of hit.drops) {
               addStack(this.inventory, drop);
             }
+            this.recordQuestEvent({ type: "mob_killed", target: hit.name });
             this.unlockRecipesFromInventory();
             this.hud.showToast(`화살로 ${hit.name} 처치`);
           } else {
@@ -722,6 +763,7 @@ export class Game {
           for (const drop of hit.drops) {
             addStack(this.inventory, drop);
           }
+          this.recordQuestEvent({ type: "mob_killed", target: hit.name });
           this.unlockRecipesFromInventory();
           this.hud.showToast(`${hit.name} 처치`);
           this.queueSave();
@@ -803,6 +845,14 @@ export class Game {
       return;
     }
 
+    if (this.handleBucketUse(held)) {
+      return;
+    }
+
+    if (held.item === "flint_and_steel" && this.handleIgniteUse()) {
+      return;
+    }
+
     const block = blockFromItem(held.item);
     if (block === null) {
       return;
@@ -812,15 +862,106 @@ export class Game {
     const y = this.selectedHit.y + this.selectedHit.normal.y;
     const z = this.selectedHit.z + this.selectedHit.normal.z;
     const current = this.world.getBlock(x, y, z);
-    const canReplace = current === BlockType.Air || current === BlockType.Water;
+    const canReplace = current === BlockType.Air || current === BlockType.Water || current === BlockType.Fire;
 
     if (canReplace && !this.player.intersectsBlock(x, y, z)) {
       const changed = this.world.setBlock(x, y, z, block);
       if (changed) {
         this.consumeSelected(1);
+        const hardened = this.applyFluidAt(x, y, z);
+        this.recordQuestEvent({ type: "block_placed", target: BLOCKS[block].id });
+        if (hardened > 0) {
+          this.recordQuestEvent({ type: "block_placed", target: "obsidian", amount: hardened });
+        }
         this.queueSave();
       }
     }
+  }
+
+  private handleBucketUse(held: ItemStack): boolean {
+    if (!this.selectedHit) {
+      return false;
+    }
+
+    if (held.item === "bucket") {
+      if (this.selectedHit.block !== BlockType.Water && this.selectedHit.block !== BlockType.Lava) {
+        return false;
+      }
+
+      const filled = this.selectedHit.block === BlockType.Water ? "water_bucket" : "lava_bucket";
+      this.world.setBlock(this.selectedHit.x, this.selectedHit.y, this.selectedHit.z, BlockType.Air);
+      this.setSelectedStack({ item: filled, count: 1 });
+      this.applyFluidAt(this.selectedHit.x, this.selectedHit.y, this.selectedHit.z);
+      if (filled === "lava_bucket") {
+        this.recordQuestEvent({ type: "discover", target: "lava" });
+      }
+      this.unlockRecipesFromInventory();
+      this.queueSave();
+      return true;
+    }
+
+    if (held.item !== "water_bucket" && held.item !== "lava_bucket") {
+      return false;
+    }
+
+    const x = this.selectedHit.x + this.selectedHit.normal.x;
+    const y = this.selectedHit.y + this.selectedHit.normal.y;
+    const z = this.selectedHit.z + this.selectedHit.normal.z;
+    const current = this.world.getBlock(x, y, z);
+    const canReplace = current === BlockType.Air || current === BlockType.Water || current === BlockType.Lava || current === BlockType.Fire;
+
+    if (!canReplace || this.player.intersectsBlock(x, y, z)) {
+      return true;
+    }
+
+    const block = held.item === "water_bucket" ? BlockType.Water : BlockType.Lava;
+    if (this.world.setBlock(x, y, z, block)) {
+      this.setSelectedStack({ item: "bucket", count: 1 });
+      const hardened = this.applyFluidAt(x, y, z);
+      this.recordQuestEvent({ type: "block_placed", target: BLOCKS[block].id });
+      if (hardened > 0) {
+        this.recordQuestEvent({ type: "block_placed", target: "obsidian", amount: hardened });
+      }
+      if (block === BlockType.Lava) {
+        this.recordQuestEvent({ type: "discover", target: "lava" });
+      }
+      this.unlockRecipesFromInventory();
+      this.queueSave();
+    }
+
+    return true;
+  }
+
+  private handleIgniteUse(): boolean {
+    if (!this.selectedHit) {
+      return false;
+    }
+
+    const x = this.selectedHit.x + this.selectedHit.normal.x;
+    const y = this.selectedHit.y + this.selectedHit.normal.y;
+    const z = this.selectedHit.z + this.selectedHit.normal.z;
+    const portal = tryIgnitePortal(this.world, x, y, z);
+    if (portal.success) {
+      this.damageHeldTool();
+      this.recordQuestEvent({ type: "portal_ignited", target: "nether_portal" });
+      this.hud.showToast("지옥문이 열렸습니다");
+      this.queueSave();
+      return true;
+    }
+
+    if (this.world.getBlock(x, y, z) === BlockType.Air) {
+      this.world.setBlock(x, y, z, BlockType.Fire);
+      this.damageHeldTool();
+      this.recordQuestEvent({ type: "block_placed", target: "fire" });
+      this.queueSave();
+      return true;
+    }
+
+    return false;
+  }
+
+  private applyFluidAt(x: number, y: number, z: number): number {
+    return applyFluidInteractions(this.world, [{ x, y, z }]);
   }
 
   private breakTime(block: BlockType): number {
@@ -904,11 +1045,13 @@ export class Game {
         addStack(this.inventory, loot);
       }
       this.lootedChests.add(chestKey);
+      this.recordQuestEvent({ type: "discover", target: "chest" });
       this.hud.showToast("상자 보급품을 찾았습니다");
     }
 
     this.damageHeldTool();
     this.survival.addExhaustion(0.005);
+    this.recordQuestEvent({ type: "block_mined", target: definition.id });
     this.unlockRecipesFromInventory();
     this.queueSave();
   }
@@ -940,6 +1083,7 @@ export class Game {
     }
 
     this.lootedChests.add(key);
+    this.recordQuestEvent({ type: "discover", target: "chest" });
     this.unlockRecipesFromInventory();
     this.queueSave();
     this.hud.showToast(accepted > 0 ? "상자에서 보급품을 챙겼습니다" : "가방이 가득 차서 챙길 수 없습니다");
@@ -970,6 +1114,18 @@ export class Game {
 
     if (roll(0xd1a) > 0.9) {
       loot.push({ item: "diamond", count: 1 });
+    }
+
+    if (roll(0xf11b7) > 0.72) {
+      loot.push({ item: "flint", count: 1 + Math.floor(roll(0xf11b8) * 2) });
+    }
+
+    if (roll(0xbcc7) > 0.88) {
+      loot.push({ item: "bucket", count: 1 });
+    }
+
+    if (roll(0x0b51) > 0.9) {
+      loot.push({ item: "obsidian", count: 1 + Math.floor(roll(0x0b52) * 2) });
     }
 
     if (roll(0xc01f) > 0.86) {
@@ -1007,6 +1163,10 @@ export class Game {
     if (stack.count <= 0) {
       this.inventory.slots[index] = null;
     }
+  }
+
+  private setSelectedStack(stack: ItemStack | null): void {
+    this.inventory.slots[HOTBAR_START + this.inventory.selectedHotbarSlot] = stack;
   }
 
   private handleInventoryClick(index: number, button: 0 | 2, shift: boolean): void {
@@ -1093,9 +1253,9 @@ export class Game {
     }
 
     const result = { ...recipe.result };
+    let made = 0;
 
     if (shift) {
-      let made = 0;
       while (matchRecipeFromGrid(this.activeCraftingGrid(), this.craftingGridSize)?.id === recipe.id) {
         if (!this.inventoryCanAccept(result)) {
           break;
@@ -1119,9 +1279,13 @@ export class Game {
       } else {
         this.inventory.cursor = result;
       }
+      made = result.count;
     }
 
     this.unlockedRecipes.add(recipe.id);
+    if (made > 0) {
+      this.recordQuestEvent({ type: "crafted", target: recipe.result.item, amount: made });
+    }
     this.unlockRecipesFromInventory();
     this.queueSave();
   }
@@ -1160,6 +1324,7 @@ export class Game {
     const made = smelt(recipe, this.inventory, smeltAll);
     if (made > 0) {
       this.hud.showToast(`${recipe.name} 완료`);
+      this.recordQuestEvent({ type: "smelted", target: recipe.result.item, amount: made });
       this.unlockRecipesFromInventory();
       this.queueSave();
     }
@@ -1418,16 +1583,21 @@ export class Game {
     this.undergroundFactor = underground;
     this.sunTarget.position.copy(this.player.position);
     this.sunLight.position.copy(this.player.position).add(sunOffset);
-    this.sunLight.intensity = (0.08 + day * 2.25) * (1 - underground * 0.82);
-    this.hemisphereLight.intensity = (0.12 + day * 0.56) * (1 - underground * 0.72) + torchGlow * 0.18;
+    const netherFactor = this.dimension === "nether" ? 1 : 0;
+    this.sunLight.intensity = (0.08 + day * 2.25) * (1 - underground * 0.82) * (1 - netherFactor * 0.62);
+    this.hemisphereLight.intensity =
+      ((0.12 + day * 0.56) * (1 - underground * 0.72) + torchGlow * 0.18) * (1 - netherFactor * 0.38) +
+      netherFactor * 0.16;
     this.heldLight.intensity = holdingTorch && this.mode === "playing" ? 0.85 : 0;
 
     const fog = this.scene.fog;
     if (fog instanceof THREE.FogExp2) {
       const caveColor = new THREE.Color("#040608").lerp(new THREE.Color("#131e29"), torchGlow * 0.5);
       const skyColor = new THREE.Color("#131e29").lerp(new THREE.Color("#c8dde2"), day);
-      fog.color.copy(skyColor.lerp(caveColor, underground * 0.78));
-      fog.density = 0.012 + underground * 0.018 - day * 0.004;
+      const normalFog = skyColor.lerp(caveColor, underground * 0.78);
+      const netherFog = new THREE.Color("#3b1010").lerp(new THREE.Color("#6a281c"), torchGlow * 0.35);
+      fog.color.copy(normalFog.lerp(netherFog, netherFactor));
+      fog.density = 0.012 + underground * 0.018 - day * 0.004 + netherFactor * 0.016;
     }
   }
 
@@ -1492,6 +1662,62 @@ export class Game {
     }
   }
 
+  private recordQuestEvent(event: QuestEvent): void {
+    this.applyCompletedQuests(applyQuestEvent(this.questState, event, this.inventory, this.dimension));
+  }
+
+  private updateQuestProgress(): void {
+    this.applyCompletedQuests(syncQuestState(this.questState, this.inventory, this.dimension));
+  }
+
+  private applyCompletedQuests(completed: QuestDefinition[]): void {
+    if (completed.length === 0) {
+      return;
+    }
+
+    const rewardItems: string[] = [];
+    for (const quest of completed) {
+      for (const reward of quest.rewards.items ?? []) {
+        const leftover = addStack(this.inventory, { ...reward });
+        const accepted = reward.count - (leftover?.count ?? 0);
+        if (accepted > 0) {
+          rewardItems.push(`${ITEM_DEFINITIONS[reward.item].name} x${accepted}`);
+        }
+      }
+    }
+
+    const first = completed[0];
+    const extra = completed.length > 1 ? ` 외 ${completed.length - 1}개` : "";
+    const xpAmount = first.rewards.xp ?? (first.category === "main" ? 25 : 10);
+    const rewardText = rewardItems.length > 0 ? `보상: ${rewardItems.join(", ")}` : `진행도 +${xpAmount}`;
+    this.hud.showQuestToast(`퀘스트 완료: ${first.titleKo}${extra}`, first.rewards.toastKo, rewardText);
+    this.unlockRecipesFromInventory();
+    this.queueSave();
+  }
+
+  private updatePortalTravel(delta: number): void {
+    if (this.dimension !== "overworld") {
+      this.portalTimer = 0;
+      return;
+    }
+
+    if (!isInPortal(this.world, this.player.position.x, this.player.position.y, this.player.position.z)) {
+      this.portalTimer = 0;
+      return;
+    }
+
+    this.portalTimer += delta;
+    if (this.portalTimer < 2) {
+      return;
+    }
+
+    this.dimension = "nether";
+    this.portalTimer = 0;
+    this.recordQuestEvent({ type: "dimension", target: "nether" });
+    this.hud.showToast("지옥 차원 진입 기반이 열렸습니다");
+    this.queueSave();
+  }
+
   private queueSave(): void {
     if (!this.activeWorld) {
       return;
@@ -1520,7 +1746,7 @@ export class Game {
       }
       const save: WorldSaveV2 = {
         ...this.activeWorld,
-        version: 3,
+        version: 4,
         worldgenVersion: this.activeWorld.worldgenVersion ?? this.world.worldgenVersion,
         updatedAt: now,
         modified: this.world.exportModifiedBlocks(),
@@ -1530,7 +1756,10 @@ export class Game {
         unlockedRecipes: [...this.unlockedRecipes],
         lootedChests: [...this.lootedChests],
         entities: this.mobs.snapshot(),
-        gameRules: this.activeWorld.gameRules ?? { mobGriefing: true }
+        gameRules: this.activeWorld.gameRules ?? { mobGriefing: true },
+        dimension: this.dimension,
+        quests: normalizeQuestState(this.questState),
+        milestones: [...this.questState.milestones]
       };
       this.activeWorld = save;
       this.saveIndex = await this.saveSystem.upsertWorld(save);
@@ -1554,9 +1783,10 @@ export class Game {
       craftable: canCraft(recipe, this.inventory, this.craftingGridSize),
       unlocked: recipeIsUnlocked(recipe, this.unlockedRecipes, this.inventory)
     }));
+    const dimensionLabel = this.dimension === "nether" ? "지옥" : this.dimension === "end" ? "엔드" : "지상";
 
     this.hud.update({
-      position: `좌표 ${Math.floor(position.x)} ${Math.floor(position.y)} ${Math.floor(position.z)} | ${this.world.seed}`,
+      position: `차원 ${dimensionLabel} | 좌표 ${Math.floor(position.x)} ${Math.floor(position.y)} ${Math.floor(position.z)} | ${this.world.seed}`,
       chunks: stats.chunks,
       mobs: this.mobs.count,
       fps: Math.round(this.fps),
@@ -1571,6 +1801,8 @@ export class Game {
       recipes: recipeViews,
       craftingGrid: this.activeCraftingGrid(),
       craftingResult: craftingResult ? { ...craftingResult } : null,
+      questState: this.questState,
+      dimension: this.dimension,
       smeltingRecipes: SMELTING_RECIPES.map((recipe) => ({
         recipe,
         smeltable: canSmelt(recipe, this.inventory)
