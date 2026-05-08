@@ -5,9 +5,21 @@ import { clamp } from "./math";
 import { type SavedEntity } from "./saveSystem";
 import { World } from "./world";
 
-export type MobType = "zombie" | "skeleton" | "spider" | "creeper" | "armored_zombie" | "skeleton_captain" | "cow" | "pig" | "sheep" | "chicken";
+export type MobType =
+  | "zombie"
+  | "skeleton"
+  | "spider"
+  | "creeper"
+  | "armored_zombie"
+  | "skeleton_captain"
+  | "blaze"
+  | "enderman"
+  | "cow"
+  | "pig"
+  | "sheep"
+  | "chicken";
 
-type MobBehavior = "melee" | "skeleton" | "spider" | "creeper" | "animal";
+type MobBehavior = "melee" | "skeleton" | "spider" | "creeper" | "blaze" | "enderman" | "animal";
 
 interface MobDefinition {
   type: MobType;
@@ -193,6 +205,38 @@ const DEFINITIONS: Record<MobType, MobDefinition> = {
     colors: { body: "#55a95a", accent: "#35793b", legs: "#3e8742", eyes: "#101510" },
     drops: [{ item: "gunpowder", min: 0, max: 2, chance: 0.86 }]
   },
+  blaze: {
+    type: "blaze",
+    name: "블레이즈",
+    hostile: true,
+    behavior: "blaze",
+    health: 20,
+    speed: 1.25,
+    radius: 0.38,
+    height: 1.8,
+    detection: 31,
+    attackDamage: 5,
+    attackRange: 15,
+    attackCooldown: 1.8,
+    colors: { body: "#f0a83c", accent: "#5a2418", legs: "#d86a2e", eyes: "#2a120c" },
+    drops: [{ item: "blaze_rod", min: 0, max: 1, chance: 0.6 }]
+  },
+  enderman: {
+    type: "enderman",
+    name: "엔더맨",
+    hostile: true,
+    behavior: "enderman",
+    health: 40,
+    speed: 2.35,
+    radius: 0.36,
+    height: 2.9,
+    detection: 34,
+    attackDamage: 7,
+    attackRange: 1.45,
+    attackCooldown: 0.95,
+    colors: { body: "#19151f", accent: "#15121a", legs: "#120f17", eyes: "#c45cff" },
+    drops: [{ item: "ender_pearl", min: 0, max: 1, chance: 0.55 }]
+  },
   cow: {
     type: "cow",
     name: "소",
@@ -360,6 +404,8 @@ export class MobManager {
         this.updateAnimal(mob, definition, world, playerPosition, horizontalDistance, elapsed, delta);
       } else if (definition.behavior === "skeleton") {
         this.updateSkeleton(mob, definition, world, playerPosition, toPlayer, horizontalDistance, verticalDistance, delta);
+      } else if (definition.behavior === "blaze") {
+        this.updateBlaze(mob, definition, world, playerPosition, toPlayer, horizontalDistance, verticalDistance, delta);
       } else if (definition.behavior === "creeper") {
         this.updateCreeper(mob, definition, world, playerPosition, toPlayer, horizontalDistance, verticalDistance, delta, result, index);
         if (!this.mobs.includes(mob)) {
@@ -491,6 +537,37 @@ export class MobManager {
     }
   }
 
+  private updateBlaze(
+    mob: MobEntity,
+    definition: MobDefinition,
+    world: World,
+    playerPosition: THREE.Vector3,
+    toPlayer: THREE.Vector3,
+    horizontalDistance: number,
+    verticalDistance: number,
+    delta: number
+  ): void {
+    const desired = new THREE.Vector3();
+    if (horizontalDistance < 6) {
+      desired.set(-toPlayer.x, 0, -toPlayer.z).normalize().multiplyScalar(definition.speed);
+    } else if (horizontalDistance < definition.detection) {
+      const side = new THREE.Vector3(-toPlayer.z, 0, toPlayer.x).normalize().multiplyScalar(Math.sin(mob.age * 2.3 + mob.id) * 0.75);
+      desired.set(toPlayer.x, 0, toPlayer.z).normalize().multiplyScalar(definition.speed * 0.48).add(side);
+    } else {
+      desired.set(Math.sin(mob.age * 0.72 + mob.id), 0, Math.cos(mob.age * 0.55 + mob.id)).multiplyScalar(0.42);
+    }
+
+    this.steer(mob, desired, delta);
+    mob.velocity.y += 18 * delta;
+    mob.velocity.y += (Math.sin(mob.age * 2.5) * 0.5 + clamp(toPlayer.y - 0.6, -1, 1) * 0.35) * delta;
+    this.moveMob(mob, definition, world, delta);
+
+    if (horizontalDistance < definition.attackRange && verticalDistance < 6 && mob.attackCooldown <= 0) {
+      this.shootArrow(mob, definition, playerPosition, "#ff9c2e", 10.5, 0.18);
+      mob.attackCooldown = definition.attackCooldown;
+    }
+  }
+
   private updateCreeper(
     mob: MobEntity,
     definition: MobDefinition,
@@ -593,6 +670,15 @@ export class MobManager {
       return;
     }
 
+    if (world.dimension === "nether") {
+      const hostileCount = this.mobs.filter((mob) => DEFINITIONS[mob.type].hostile).length;
+      if (hostileCount < 12) {
+        const pool: MobType[] = Math.random() < 0.72 ? ["blaze", "blaze", "enderman"] : ["enderman"];
+        this.trySpawnType(world, playerPosition, pool[Math.floor(Math.random() * pool.length)], true);
+      }
+      return;
+    }
+
     const night = dayFactor < 0.34;
     const cave = undergroundFactor > 0.48;
     const animalWeather = dayFactor > 0.55 && undergroundFactor < 0.18;
@@ -601,8 +687,8 @@ export class MobManager {
 
     if ((night || cave) && hostileCount < 11) {
       const pool: MobType[] = cave
-        ? ["zombie", "skeleton", "spider", "creeper", "armored_zombie", "skeleton_captain"]
-        : ["zombie", "skeleton", "spider", "creeper"];
+        ? ["zombie", "skeleton", "spider", "creeper", "armored_zombie", "skeleton_captain", "enderman"]
+        : ["zombie", "skeleton", "spider", "creeper", "enderman"];
       this.trySpawnType(world, playerPosition, pool[Math.floor(Math.random() * pool.length)], cave);
       return;
     }
@@ -629,6 +715,14 @@ export class MobManager {
       }
 
       if (definition.hostile && this.isNearTorch(world, Math.floor(x), y, Math.floor(z), 7)) {
+        continue;
+      }
+
+      if (
+        type === "blaze" &&
+        !this.isNearBlock(world, Math.floor(x), y, Math.floor(z), BlockType.NetherBrick, 12) &&
+        Math.random() < 0.86
+      ) {
         continue;
       }
 
@@ -676,15 +770,30 @@ export class MobManager {
     this.group.add(mob.mesh);
   }
 
-  private shootArrow(mob: MobEntity, definition: MobDefinition, playerPosition: THREE.Vector3): void {
+  private shootArrow(
+    mob: MobEntity,
+    definition: MobDefinition,
+    playerPosition: THREE.Vector3,
+    color = "#d8d3c0",
+    speed = 13.5,
+    size = 0.06
+  ): void {
     const start = mob.position.clone().add(new THREE.Vector3(0, definition.height * 0.72, 0));
     const target = playerPosition.clone().add(new THREE.Vector3(0, 1.05, 0));
     const direction = target.sub(start).normalize();
     direction.y += 0.07;
     direction.normalize();
 
-    const geometry = new THREE.BoxGeometry(0.06, 0.62, 0.06);
-    const material = new THREE.MeshStandardMaterial({ color: "#d8d3c0", roughness: 0.8 });
+    const geometry =
+      definition.behavior === "blaze"
+        ? new THREE.BoxGeometry(size, size, size)
+        : new THREE.BoxGeometry(size, 0.62, size);
+    const material = new THREE.MeshStandardMaterial({
+      color,
+      emissive: definition.behavior === "blaze" ? new THREE.Color("#a43b18") : new THREE.Color("#000000"),
+      emissiveIntensity: definition.behavior === "blaze" ? 0.9 : 0,
+      roughness: 0.8
+    });
     const mesh = new THREE.Mesh(geometry, material);
     mesh.castShadow = true;
     this.group.add(mesh);
@@ -694,7 +803,7 @@ export class MobManager {
       age: 0,
       damage: definition.attackDamage,
       position: start,
-      velocity: direction.multiplyScalar(13.5),
+      velocity: direction.multiplyScalar(speed),
       mesh
     };
     this.nextId += 1;
@@ -792,6 +901,22 @@ export class MobManager {
     return false;
   }
 
+  private isNearBlock(world: World, x: number, y: number, z: number, block: BlockType, radius: number): boolean {
+    for (let dy = -4; dy <= 4; dy += 1) {
+      for (let dz = -radius; dz <= radius; dz += 1) {
+        for (let dx = -radius; dx <= radius; dx += 1) {
+          if (dx * dx + dy * dy + dz * dz > radius * radius) {
+            continue;
+          }
+          if (world.getBlock(x + dx, y + dy, z + dz) === block) {
+            return true;
+          }
+        }
+      }
+    }
+    return false;
+  }
+
   private shouldDespawn(mob: MobEntity, definition: MobDefinition, horizontalDistance: number): boolean {
     if (horizontalDistance > 82 || mob.position.y < -14 || mob.age > 520) {
       return true;
@@ -877,7 +1002,52 @@ export class MobManager {
       return this.createCreeperMesh(definition);
     }
 
+    if (definition.behavior === "blaze") {
+      return this.createBlazeMesh(definition);
+    }
+
+    if (definition.behavior === "enderman") {
+      return this.createEndermanMesh(definition);
+    }
+
     return this.createHumanoidMesh(definition);
+  }
+
+  private createBlazeMesh(definition: MobDefinition): THREE.Group {
+    const group = new THREE.Group();
+    const body = mat(definition.colors.body);
+    const rod = mat(definition.colors.legs ?? definition.colors.body);
+    const eye = new THREE.MeshBasicMaterial({ color: definition.colors.eyes ?? "#2a120c" });
+    addBox(group, [0.46, 0.46, 0.46], [0, 1.04, 0], body);
+    addBox(group, [0.08, 0.08, 0.04], [-0.1, 1.08, -0.25], eye);
+    addBox(group, [0.08, 0.08, 0.04], [0.1, 1.08, -0.25], eye);
+
+    for (let index = 0; index < 8; index += 1) {
+      const angle = (index / 8) * Math.PI * 2;
+      const radius = 0.62 + (index % 2) * 0.1;
+      const y = 0.72 + (index % 3) * 0.28;
+      const rodMesh = addBox(group, [0.14, 0.72, 0.14], [Math.cos(angle) * radius, y, Math.sin(angle) * radius], rod, index % 2 === 0 ? "arm-a" : "arm-b");
+      rodMesh.rotation.y = angle;
+    }
+
+    return group;
+  }
+
+  private createEndermanMesh(definition: MobDefinition): THREE.Group {
+    const group = new THREE.Group();
+    const body = mat(definition.colors.body);
+    const accent = mat(definition.colors.accent ?? definition.colors.body);
+    const eyes = new THREE.MeshBasicMaterial({ color: definition.colors.eyes ?? "#c45cff" });
+
+    addBox(group, [0.48, 0.48, 0.48], [0, 2.55, 0], body);
+    addBox(group, [0.42, 1.05, 0.28], [0, 1.76, 0], accent);
+    addBox(group, [0.16, 1.5, 0.16], [-0.38, 1.45, 0], body, "arm-a");
+    addBox(group, [0.16, 1.5, 0.16], [0.38, 1.45, 0], body, "arm-b");
+    addBox(group, [0.16, 1.42, 0.16], [-0.13, 0.7, 0], body, "leg-a");
+    addBox(group, [0.16, 1.42, 0.16], [0.13, 0.7, 0], body, "leg-b");
+    addBox(group, [0.12, 0.05, 0.03], [-0.1, 2.58, -0.25], eyes);
+    addBox(group, [0.12, 0.05, 0.03], [0.1, 2.58, -0.25], eyes);
+    return group;
   }
 
   private createHumanoidMesh(definition: MobDefinition): THREE.Group {

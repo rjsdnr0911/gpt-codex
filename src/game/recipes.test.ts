@@ -57,4 +57,19 @@ describe("recipes", () => {
     expect(canCraft(bucket!, inventory, 3)).toBe(true);
     expect(canCraft(flintAndSteel!, inventory, 2)).toBe(true);
   });
+
+  it("crafts blaze powder and an eye of ender from nether progression drops", () => {
+    const inventory = createInventoryState();
+    addStack(inventory, { item: "blaze_rod", count: 1 });
+    addStack(inventory, { item: "ender_pearl", count: 1 });
+    const powder = RECIPES.find((entry) => entry.id === "blaze_powder");
+    const eye = RECIPES.find((entry) => entry.id === "eye_of_ender");
+
+    expect(powder).toBeDefined();
+    expect(eye).toBeDefined();
+    expect(craft(powder!, inventory, 2)).toBe(2);
+    expect(canCraft(eye!, inventory, 2)).toBe(true);
+    expect(craft(eye!, inventory, 2)).toBe(1);
+    expect(inventory.slots.some((slot) => slot?.item === "eye_of_ender")).toBe(true);
+  });
 });

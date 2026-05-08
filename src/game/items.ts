@@ -12,6 +12,10 @@ export type ItemId =
   | "gravel"
   | "water"
   | "obsidian"
+  | "netherrack"
+  | "nether_brick"
+  | "soul_sand"
+  | "basalt"
   | "log"
   | "leaves"
   | "ore"
@@ -27,6 +31,8 @@ export type ItemId =
   | "lapis_ore"
   | "diamond_ore"
   | "emerald_ore"
+  | "quartz_ore"
+  | "nether_gold_ore"
   | "coal"
   | "raw_copper"
   | "raw_iron"
@@ -38,6 +44,8 @@ export type ItemId =
   | "lapis_lazuli"
   | "diamond"
   | "emerald"
+  | "nether_quartz"
+  | "gold_nugget"
   | "furnace"
   | "chest"
   | "torch"
@@ -46,6 +54,10 @@ export type ItemId =
   | "water_bucket"
   | "lava_bucket"
   | "flint_and_steel"
+  | "blaze_rod"
+  | "blaze_powder"
+  | "ender_pearl"
+  | "eye_of_ender"
   | "wooden_pickaxe"
   | "stone_pickaxe"
   | "iron_pickaxe"
@@ -152,6 +164,16 @@ export const ITEM_DEFINITIONS: Record<ItemId, ItemDefinition> = {
   gravel: { id: "gravel", name: "자갈", maxStack: 64, color: "#7a7c7a", placeBlock: BlockType.Gravel },
   water: { id: "water", name: "물", maxStack: 64, color: "#2e9bc9", placeBlock: BlockType.Water },
   obsidian: { id: "obsidian", name: "흑요석", maxStack: 64, color: "#211a31", placeBlock: BlockType.Obsidian },
+  netherrack: { id: "netherrack", name: "네더랙", maxStack: 64, color: "#7f2f2d", placeBlock: BlockType.Netherrack },
+  nether_brick: {
+    id: "nether_brick",
+    name: "네더 벽돌",
+    maxStack: 64,
+    color: "#3c1b24",
+    placeBlock: BlockType.NetherBrick
+  },
+  soul_sand: { id: "soul_sand", name: "영혼 모래", maxStack: 64, color: "#6e5042", placeBlock: BlockType.SoulSand },
+  basalt: { id: "basalt", name: "현무암", maxStack: 64, color: "#4a4648", placeBlock: BlockType.Basalt },
   log: { id: "log", name: "원목", maxStack: 64, color: "#805331", placeBlock: BlockType.Log },
   leaves: { id: "leaves", name: "나뭇잎", maxStack: 64, color: "#448f50", placeBlock: BlockType.Leaves },
   ore: { id: "ore", name: "구형 광석", maxStack: 64, color: "#59bdc4", placeBlock: BlockType.Ore },
@@ -203,6 +225,20 @@ export const ITEM_DEFINITIONS: Record<ItemId, ItemDefinition> = {
     color: "#45bf62",
     placeBlock: BlockType.EmeraldOre
   },
+  quartz_ore: {
+    id: "quartz_ore",
+    name: "네더 석영 광석",
+    maxStack: 64,
+    color: "#b36f67",
+    placeBlock: BlockType.QuartzOre
+  },
+  nether_gold_ore: {
+    id: "nether_gold_ore",
+    name: "네더 금 광석",
+    maxStack: 64,
+    color: "#ad5b35",
+    placeBlock: BlockType.NetherGoldOre
+  },
   coal: { id: "coal", name: "석탄", maxStack: 64, color: "#2e3130" },
   raw_copper: { id: "raw_copper", name: "구리 원석", maxStack: 64, color: "#c9794a" },
   raw_iron: { id: "raw_iron", name: "철 원석", maxStack: 64, color: "#c2a38d" },
@@ -214,6 +250,8 @@ export const ITEM_DEFINITIONS: Record<ItemId, ItemDefinition> = {
   lapis_lazuli: { id: "lapis_lazuli", name: "청금석", maxStack: 64, color: "#365bc8" },
   diamond: { id: "diamond", name: "다이아몬드", maxStack: 64, color: "#65e0dc" },
   emerald: { id: "emerald", name: "에메랄드", maxStack: 64, color: "#4bd66d" },
+  nether_quartz: { id: "nether_quartz", name: "네더 석영", maxStack: 64, color: "#e8dfcf" },
+  gold_nugget: { id: "gold_nugget", name: "금 조각", maxStack: 64, color: "#f0c747" },
   furnace: { id: "furnace", name: "화로", maxStack: 64, color: "#686e6b", placeBlock: BlockType.Furnace },
   chest: { id: "chest", name: "상자", maxStack: 64, color: "#9b642f", placeBlock: BlockType.Chest },
   torch: { id: "torch", name: "횃불", maxStack: 64, color: "#f0a83c", placeBlock: BlockType.Torch },
@@ -228,6 +266,10 @@ export const ITEM_DEFINITIONS: Record<ItemId, ItemDefinition> = {
     color: "#c9d1d1",
     durability: 64
   },
+  blaze_rod: { id: "blaze_rod", name: "블레이즈 막대", maxStack: 64, color: "#f0a83c" },
+  blaze_powder: { id: "blaze_powder", name: "블레이즈 가루", maxStack: 64, color: "#f4c35a" },
+  ender_pearl: { id: "ender_pearl", name: "엔더 진주", maxStack: 16, color: "#1f8c7d" },
+  eye_of_ender: { id: "eye_of_ender", name: "엔더의 눈", maxStack: 64, color: "#79d6a8" },
 
   wooden_pickaxe: {
     id: "wooden_pickaxe",
@@ -514,6 +556,18 @@ export function itemFromBlock(block: BlockType): ItemId | null {
     case BlockType.Obsidian:
     case BlockType.RuinedPortalDebris:
       return "obsidian";
+    case BlockType.Netherrack:
+      return "netherrack";
+    case BlockType.NetherBrick:
+      return "nether_brick";
+    case BlockType.SoulSand:
+      return "soul_sand";
+    case BlockType.Basalt:
+      return "basalt";
+    case BlockType.QuartzOre:
+      return "quartz_ore";
+    case BlockType.NetherGoldOre:
+      return "nether_gold_ore";
     case BlockType.Log:
       return "log";
     case BlockType.Leaves:

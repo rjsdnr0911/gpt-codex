@@ -40,6 +40,8 @@ export type QuestId =
   | "main_enter_nether"
   | "road_find_fortress"
   | "road_kill_blaze"
+  | "road_make_blaze_powder"
+  | "road_kill_enderman"
   | "road_make_eye"
   | "road_find_stronghold"
   | "road_activate_end_portal"
@@ -199,13 +201,53 @@ export const QUESTS: QuestDefinition[] = [
     "포털 안에 잠시 서서 지옥 차원 진입 기반을 확인하세요.",
     ["main_ignite_portal"],
     objective("dimension", "nether", 1, "지옥 진입"),
-    ["flint_and_steel", "obsidian"],
-    { unlockHints: ["이번 빌드는 지옥 진입 기반까지 구현되어 있고, 요새와 블레이즈는 다음 대형 업데이트입니다."] }
+    ["flint_and_steel", "obsidian", "netherrack"],
+    { unlockHints: ["지옥에서는 귀환 포털 위치를 기억하고, 네더 벽돌 구조물을 찾으면 블레이즈를 만날 수 있습니다."] }
   ),
-  future("road_find_fortress", "이후: 지옥 요새", "지옥 요새를 찾아 블레이즈 스폰 지점을 확보합니다.", ["main_enter_nether"], discover("fortress", 1, "요새 발견"), ["torch"]),
-  future("road_kill_blaze", "이후: 블레이즈", "블레이즈를 처치해 블레이즈 막대를 얻습니다.", ["road_find_fortress"], killed("blaze", 1, "블레이즈 처치"), ["iron_sword", "shield"]),
-  future("road_make_eye", "이후: 엔더의 눈", "엔더 진주와 블레이즈 가루를 합쳐 엔더의 눈을 만듭니다.", ["road_kill_blaze"], crafted("ender_eye", 12, "엔더의 눈"), ["diamond"]),
-  future("road_find_stronghold", "이후: 요새 추적", "엔더의 눈을 던져 지상 요새를 찾습니다.", ["road_make_eye"], discover("stronghold", 1, "요새 발견"), ["diamond_pickaxe"]),
+  main(
+    "road_find_fortress",
+    "지옥 요새 수색",
+    "네더 벽돌로 된 요새 통로를 찾아 블레이즈 사냥 준비를 하세요.",
+    ["main_enter_nether"],
+    discover("fortress", 1, "요새 발견"),
+    ["torch", "nether_brick", "netherrack"],
+    { items: [{ item: "bread", count: 1 }], unlockHints: ["네더 벽돌 구조물 안팎에서 블레이즈가 자주 나타납니다."] }
+  ),
+  main(
+    "road_kill_blaze",
+    "블레이즈 막대",
+    "방패나 활을 준비하고 블레이즈를 처치해 막대를 얻으세요.",
+    ["road_find_fortress"],
+    killed("블레이즈", 1, "블레이즈 처치"),
+    ["iron_sword", "shield", "bow", "blaze_rod"],
+    { items: [{ item: "torch", count: 4 }] }
+  ),
+  main(
+    "road_make_blaze_powder",
+    "가루로 빻기",
+    "블레이즈 막대를 가루로 바꾸면 엔더의 눈 재료가 됩니다.",
+    ["road_kill_blaze"],
+    crafted("blaze_powder", 2, "블레이즈 가루 제작"),
+    ["blaze_rod", "blaze_powder"]
+  ),
+  main(
+    "road_kill_enderman",
+    "엔더 진주",
+    "지상 밤이나 지옥의 드문 엔더맨을 쓰러뜨려 엔더 진주를 확보하세요.",
+    ["road_make_blaze_powder"],
+    item("ender_pearl", 1, "엔더 진주"),
+    ["ender_pearl", "diamond_sword", "shield"]
+  ),
+  main(
+    "road_make_eye",
+    "엔더의 눈",
+    "엔더 진주와 블레이즈 가루를 합쳐 요새 추적의 핵심 아이템을 만드세요.",
+    ["road_kill_enderman"],
+    crafted("eye_of_ender", 1, "엔더의 눈 제작"),
+    ["ender_pearl", "blaze_powder", "eye_of_ender"],
+    { unlockHints: ["다음 대형 업데이트에서는 엔더의 눈을 던져 지상 요새를 찾는 단계가 열립니다."] }
+  ),
+  future("road_find_stronghold", "이후: 요새 추적", "엔더의 눈을 던져 지상 요새를 찾습니다.", ["road_make_eye"], discover("stronghold", 1, "요새 발견"), ["eye_of_ender", "diamond_pickaxe"]),
   future("road_activate_end_portal", "이후: 엔드 포털", "엔더의 눈으로 엔드 포털을 활성화합니다.", ["road_find_stronghold"], objective("portal_ignited", "end_portal", 1, "엔드 포털 활성화"), ["diamond_sword"]),
   future("road_defeat_dragon", "이후: 드래곤", "엔드 수정과 드래곤을 상대해 엔딩을 봅니다.", ["road_activate_end_portal"], killed("dragon", 1, "드래곤 처치"), ["bow", "arrow"]),
   side("side_craft_shield", "방패 만들기", "철 주괴와 판자로 방패를 만들어 첫 원거리 공격에 대비하세요.", [], crafted("shield", 1, "방패 제작"), ["shield"]),

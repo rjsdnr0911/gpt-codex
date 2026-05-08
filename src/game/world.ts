@@ -13,6 +13,7 @@ import {
   parseBlockKey
 } from "./blocks";
 import { clamp, chunkCoord, hash3, localCoord, mulberry32, seedToInt } from "./math";
+import { type DimensionId } from "./quests";
 import { type SavedBlock } from "./saveSystem";
 import { pushTileUvs, type VoxelMaterials } from "./textureAtlas";
 
@@ -111,6 +112,7 @@ export class World {
   readonly seed: string;
   readonly seedInt: number;
   readonly worldgenVersion: number;
+  readonly dimension: DimensionId;
 
   private readonly chunks = new Map<string, Chunk>();
   private readonly modified = new Map<string, BlockType>();
@@ -121,17 +123,18 @@ export class World {
   private readonly caveRoomNoise: NoiseFunction3D;
   private readonly materials: VoxelMaterials;
 
-  constructor(seed: string, materials: VoxelMaterials, worldgenVersion = WORLDGEN_VERSION) {
+  constructor(seed: string, materials: VoxelMaterials, worldgenVersion = WORLDGEN_VERSION, dimension: DimensionId = "overworld") {
     this.seed = seed;
     this.seedInt = seedToInt(seed);
     this.worldgenVersion = worldgenVersion;
+    this.dimension = dimension;
     this.materials = materials;
     this.continentalNoise = createNoise2D(mulberry32(this.seedInt ^ 0xa53a9e1d));
     this.hillNoise = createNoise2D(mulberry32(this.seedInt ^ 0x51f15e2d));
     this.detailNoise = createNoise2D(mulberry32(this.seedInt ^ 0x8c3c6f43));
     this.caveNoise = createNoise3D(mulberry32(this.seedInt ^ 0x2f63d4a1));
     this.caveRoomNoise = createNoise3D(mulberry32(this.seedInt ^ 0x9a1c77e3));
-    this.group.name = "Codex Craft world";
+    this.group.name = `Codex Craft ${dimension} world`;
   }
 
   setModifiedBlocks(blocks: SavedBlock[]): void {
@@ -179,7 +182,7 @@ export class World {
 
   getBlock(x: number, y: number, z: number): BlockType {
     if (y < 0) {
-      return BlockType.Stone;
+      return this.dimension === "nether" ? BlockType.Basalt : BlockType.Stone;
     }
 
     if (y >= WORLD_HEIGHT) {
@@ -258,6 +261,10 @@ export class World {
   }
 
   terrainHeight(x: number, z: number): number {
+    if (this.dimension === "nether") {
+      return this.netherTerrainHeight(x, z);
+    }
+
     const continent = (this.continentalNoise(x * 0.0048, z * 0.0048) + 1) * 0.5;
     const hills = this.hillNoise(x * 0.028, z * 0.028);
     const detail = this.detailNoise(x * 0.092, z * 0.092);
@@ -267,6 +274,10 @@ export class World {
   }
 
   getNaturalBlock(x: number, y: number, z: number): BlockType {
+    if (this.dimension === "nether") {
+      return this.getNetherNaturalBlock(x, y, z);
+    }
+
     const height = this.terrainHeight(x, z);
 
     if (y > height) {
@@ -366,7 +377,77 @@ export class World {
     return null;
   }
 
+  private netherTerrainHeight(x: number, z: number): number {
+    const shelf = this.hillNoise(x * 0.018 + 90, z * 0.018 - 140);
+    const detail = this.detailNoise(x * 0.067 - 40, z * 0.067 + 20);
+    return clamp(Math.floor(44 + shelf * 8 + detail * 3), 28, WORLD_HEIGHT - 8);
+  }
+
+  private getNetherNaturalBlock(x: number, y: number, z: number): BlockType {
+    if (y <= 1 || y >= WORLD_HEIGHT - 2) {
+      return BlockType.Basalt;
+    }
+
+    if (this.isNetherOpen(x, y, z)) {
+      return y <= 16 ? BlockType.Lava : BlockType.Air;
+    }
+
+    if (y <= 15 && hash3(this.seedInt ^ 0x1a6a, x, y, z) < 0.12) {
+      return BlockType.Lava;
+    }
+
+    const ore = this.netherOreAt(x, y, z);
+    if (ore) {
+      return ore;
+    }
+
+    const patch = hash3(this.seedInt ^ 0x50a1, Math.floor(x / 4), Math.floor(y / 3), Math.floor(z / 4));
+    if (y < 25 && patch < 0.055) {
+      return BlockType.SoulSand;
+    }
+
+    if (y > 44 && patch > 0.955) {
+      return BlockType.Basalt;
+    }
+
+    return BlockType.Netherrack;
+  }
+
+  private isNetherOpen(x: number, y: number, z: number): boolean {
+    if (y < 8 || y > WORLD_HEIGHT - 7) {
+      return false;
+    }
+
+    const midBand = clamp(1 - Math.abs(y - 37) / 31, 0, 1);
+    const tunnel = Math.abs(this.caveNoise(x * 0.045, y * 0.064, z * 0.045));
+    const room = this.caveRoomNoise(x * 0.024, y * 0.032, z * 0.024);
+    const lavaCavern = y < 21 && room > 0.58 && tunnel < 0.22;
+    return tunnel < 0.055 + midBand * 0.07 || room > 0.69 || lavaCavern;
+  }
+
+  private netherOreAt(x: number, y: number, z: number): BlockType | null {
+    const quartzBand = clamp(1 - Math.abs(y - 36) / 24, 0, 1);
+    const goldBand = clamp(1 - Math.abs(y - 28) / 20, 0, 1);
+    const quartzVein = hash3(this.seedInt ^ 0x9a44, Math.floor(x / 2), Math.floor(y / 2), Math.floor(z / 2));
+    const goldVein = hash3(this.seedInt ^ 0xa071d, Math.floor(x / 2), Math.floor(y / 2), Math.floor(z / 2));
+    const fleck = hash3(this.seedInt ^ 0x714a, x, y, z);
+
+    if (quartzVein < 0.045 * quartzBand && fleck < 0.72) {
+      return BlockType.QuartzOre;
+    }
+
+    if (goldVein < 0.024 * goldBand && fleck > 0.24 && fleck < 0.78) {
+      return BlockType.NetherGoldOre;
+    }
+
+    return null;
+  }
+
   shouldTree(x: number, z: number): boolean {
+    if (this.dimension !== "overworld") {
+      return false;
+    }
+
     const height = this.terrainHeight(x, z);
 
     if (height <= WATER_LEVEL + 2 || height > WORLD_HEIGHT - 18) {
@@ -382,6 +463,10 @@ export class World {
   }
 
   findSpawn(): THREE.Vector3 {
+    if (this.dimension === "nether") {
+      return this.findNetherSpawn();
+    }
+
     let best: THREE.Vector3 | null = null;
     let bestScore = -Infinity;
 
@@ -407,6 +492,10 @@ export class World {
   }
 
   findScenicYaw(position: THREE.Vector3): number {
+    if (this.dimension === "nether") {
+      return this.findOpenYaw(position);
+    }
+
     let bestYaw = 0;
     let bestScore = -Infinity;
     const eyeHeight = position.y + 1.6;
@@ -480,6 +569,84 @@ export class World {
 
     return penalty;
   }
+
+  private findNetherSpawn(): THREE.Vector3 {
+    let best: THREE.Vector3 | null = null;
+    let bestScore = -Infinity;
+
+    for (let z = -48; z <= 48; z += 2) {
+      for (let x = -48; x <= 48; x += 2) {
+        for (let y = 24; y <= 52; y += 1) {
+          if (!this.isAirPocketForPlayer(x, y, z)) {
+            continue;
+          }
+
+          const floor = this.getNaturalBlock(x, y - 1, z);
+          if (floor === BlockType.Lava || !BLOCKS[floor].solid) {
+            continue;
+          }
+
+          const lavaPenalty = this.nearbyBlockPenalty(x, y, z, BlockType.Lava, 5) * 4.5;
+          const fortressBonus = this.nearbyBlockPenalty(x, y, z, BlockType.NetherBrick, 18) > 0 ? 9 : 0;
+          const score = 42 - Math.hypot(x, z) * 0.22 - Math.abs(y - 36) * 1.6 + fortressBonus - lavaPenalty;
+          if (score > bestScore) {
+            bestScore = score;
+            best = new THREE.Vector3(x + 0.5, y, z + 0.5);
+          }
+        }
+      }
+    }
+
+    return best ?? new THREE.Vector3(0.5, 36, 0.5);
+  }
+
+  private isAirPocketForPlayer(x: number, y: number, z: number): boolean {
+    return (
+      this.getNaturalBlock(x, y, z) === BlockType.Air &&
+      this.getNaturalBlock(x, y + 1, z) === BlockType.Air &&
+      this.getNaturalBlock(x, y + 2, z) === BlockType.Air
+    );
+  }
+
+  private nearbyBlockPenalty(x: number, y: number, z: number, block: BlockType, radius: number): number {
+    let count = 0;
+    for (let dz = -radius; dz <= radius; dz += 2) {
+      for (let dx = -radius; dx <= radius; dx += 2) {
+        for (let dy = -3; dy <= 3; dy += 2) {
+          if (this.getNaturalBlock(x + dx, y + dy, z + dz) === block) {
+            count += 1;
+          }
+        }
+      }
+    }
+    return count;
+  }
+
+  private findOpenYaw(position: THREE.Vector3): number {
+    let bestYaw = 0;
+    let bestScore = -Infinity;
+
+    for (let index = 0; index < 32; index += 1) {
+      const yaw = (index / 32) * Math.PI * 2;
+      const dirX = -Math.sin(yaw);
+      const dirZ = -Math.cos(yaw);
+      let score = 0;
+
+      for (let distance = 3; distance <= 34; distance += 3) {
+        const x = Math.floor(position.x + dirX * distance);
+        const y = Math.floor(position.y + 1.2);
+        const z = Math.floor(position.z + dirZ * distance);
+        score += this.getBlock(x, y, z) === BlockType.Air ? 2 : -3;
+      }
+
+      if (score > bestScore) {
+        bestScore = score;
+        bestYaw = yaw;
+      }
+    }
+
+    return bestYaw;
+  }
 }
 
 class Chunk {
@@ -500,7 +667,7 @@ class Chunk {
 
   getLocal(x: number, y: number, z: number): BlockType {
     if (y < 0) {
-      return BlockType.Stone;
+      return this.world.dimension === "nether" ? BlockType.Basalt : BlockType.Stone;
     }
 
     if (y >= WORLD_HEIGHT) {
@@ -623,6 +790,11 @@ class Chunk {
       return;
     }
 
+    if (this.world.dimension === "nether") {
+      this.placeNetherStructures();
+      return;
+    }
+
     const startX = this.cx * CHUNK_SIZE;
     const startZ = this.cz * CHUNK_SIZE;
     const centerX = startX + 4 + Math.floor(hash3(this.world.seedInt ^ 0x5cab1, this.cx, 20, this.cz) * 8);
@@ -645,6 +817,67 @@ class Chunk {
     } else if (undergroundRoll < 0.047) {
       this.placeDungeon(centerX, 8 + Math.floor(hash3(this.world.seedInt ^ 0xd06e, this.cx, 5, this.cz) * 18), centerZ);
     }
+  }
+
+  private placeNetherStructures(): void {
+    const guaranteedBridge = this.cz === -4 && this.cx >= -2 && this.cx <= 2;
+    const guaranteedCross = this.cx === 0 && this.cz >= -5 && this.cz <= -3;
+    const randomFortress = hash3(this.world.seedInt ^ 0xf047, Math.floor(this.cx / 7), 0, Math.floor(this.cz / 7)) < 0.035;
+
+    if (guaranteedBridge || guaranteedCross || randomFortress) {
+      const orientation = guaranteedBridge || (!guaranteedCross && hash3(this.world.seedInt ^ 0xf048, this.cx, 1, this.cz) < 0.5)
+        ? "x"
+        : "z";
+      this.placeNetherFortressCorridor(orientation);
+    }
+  }
+
+  private placeNetherFortressCorridor(orientation: "x" | "z"): void {
+    const startX = this.cx * CHUNK_SIZE;
+    const startZ = this.cz * CHUNK_SIZE;
+    const baseY = 37;
+    const centerA = 7;
+    const sideMin = centerA - 2;
+    const sideMax = centerA + 2;
+
+    for (let a = 0; a < CHUNK_SIZE; a += 1) {
+      for (let b = sideMin; b <= sideMax; b += 1) {
+        const x = orientation === "x" ? startX + a : startX + b;
+        const z = orientation === "x" ? startZ + b : startZ + a;
+
+        this.placeGlobal(x, baseY - 1, z, BlockType.NetherBrick, true);
+        for (let y = baseY; y <= baseY + 4; y += 1) {
+          this.placeGlobal(x, y, z, BlockType.Air, true);
+        }
+
+        if (b === sideMin || b === sideMax) {
+          this.placeGlobal(x, baseY, z, BlockType.NetherBrick, true);
+          this.placeGlobal(x, baseY + 1, z, BlockType.NetherBrick, true);
+        }
+      }
+    }
+
+    if (this.cx === 0 && this.cz === -4) {
+      this.placeNetherFortressHub(startX + 7, baseY, startZ + 7);
+    }
+  }
+
+  private placeNetherFortressHub(x: number, y: number, z: number): void {
+    for (let dz = -5; dz <= 5; dz += 1) {
+      for (let dx = -5; dx <= 5; dx += 1) {
+        this.placeGlobal(x + dx, y - 1, z + dz, BlockType.NetherBrick, true);
+        for (let dy = 0; dy <= 5; dy += 1) {
+          const wall = Math.abs(dx) === 5 || Math.abs(dz) === 5 || dy === 5;
+          this.placeGlobal(x + dx, y + dy, z + dz, wall ? BlockType.NetherBrick : BlockType.Air, true);
+        }
+      }
+    }
+
+    this.placeGlobal(x, y, z, BlockType.Fire, true);
+    this.placeGlobal(x - 3, y, z + 3, BlockType.Chest, true);
+    this.placeGlobal(x + 3, y, z - 3, BlockType.QuartzOre, true);
+    this.placeGlobal(x, y + 1, z - 5, BlockType.Air, true);
+    this.placeGlobal(x + 1, y + 1, z - 5, BlockType.Air, true);
   }
 
   private placeCabin(x: number, z: number): void {
@@ -798,6 +1031,10 @@ class Chunk {
   }
 
   private placeTrees(): void {
+    if (this.world.dimension !== "overworld") {
+      return;
+    }
+
     const startX = this.cx * CHUNK_SIZE;
     const startZ = this.cz * CHUNK_SIZE;
     const margin = 4;

@@ -49,12 +49,15 @@ export interface WorldSaveV2 {
   createdAt: number;
   updatedAt: number;
   modified: SavedBlock[];
+  dimensionModified?: Partial<Record<DimensionId, SavedBlock[]>>;
   player: SavedPlayer;
+  dimensionPlayers?: Partial<Record<DimensionId, SavedPlayer>>;
   inventory: InventoryState;
   survival: SurvivalState;
   unlockedRecipes: string[];
   lootedChests?: string[];
   entities?: SavedEntity[];
+  dimensionEntities?: Partial<Record<DimensionId, SavedEntity[]>>;
   gameRules?: GameRules;
   dimension?: DimensionId;
   quests?: QuestState;

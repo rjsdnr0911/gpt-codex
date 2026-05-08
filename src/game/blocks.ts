@@ -33,7 +33,13 @@ export const enum BlockType {
   Obsidian = 26,
   Fire = 27,
   NetherPortal = 28,
-  RuinedPortalDebris = 29
+  RuinedPortalDebris = 29,
+  Netherrack = 30,
+  NetherBrick = 31,
+  SoulSand = 32,
+  Basalt = 33,
+  QuartzOre = 34,
+  NetherGoldOre = 35
 }
 
 export type BlockId =
@@ -66,7 +72,13 @@ export type BlockId =
   | "obsidian"
   | "fire"
   | "nether_portal"
-  | "ruined_portal_debris";
+  | "ruined_portal_debris"
+  | "netherrack"
+  | "nether_brick"
+  | "soul_sand"
+  | "basalt"
+  | "quartz_ore"
+  | "nether_gold_ore";
 
 export const enum TileId {
   GrassTop = 0,
@@ -100,7 +112,13 @@ export const enum TileId {
   Obsidian = 28,
   Fire = 29,
   NetherPortal = 30,
-  RuinedPortalDebris = 31
+  RuinedPortalDebris = 31,
+  Netherrack = 32,
+  NetherBrick = 33,
+  SoulSand = 34,
+  Basalt = 35,
+  QuartzOre = 36,
+  NetherGoldOre = 37
 }
 
 export type FaceName = "top" | "bottom" | "north" | "south" | "east" | "west";
@@ -566,6 +584,92 @@ export const BLOCKS: Record<BlockType, BlockDefinition> = {
     requiredTool: "pickaxe",
     requiredTier: "diamond",
     placeableItem: "obsidian"
+  },
+  [BlockType.Netherrack]: {
+    id: "netherrack",
+    displayName: "네더랙",
+    solid: true,
+    transparent: false,
+    fluid: false,
+    swatch: "#7f2f2d",
+    tiles: allFaces(TileId.Netherrack),
+    hardness: 0.55,
+    drops: "netherrack",
+    preferredTool: "pickaxe",
+    placeableItem: "netherrack"
+  },
+  [BlockType.NetherBrick]: {
+    id: "nether_brick",
+    displayName: "네더 벽돌",
+    solid: true,
+    transparent: false,
+    fluid: false,
+    swatch: "#3c1b24",
+    tiles: allFaces(TileId.NetherBrick),
+    hardness: 2,
+    drops: "nether_brick",
+    preferredTool: "pickaxe",
+    requiredTool: "pickaxe",
+    requiredTier: "wood",
+    placeableItem: "nether_brick"
+  },
+  [BlockType.SoulSand]: {
+    id: "soul_sand",
+    displayName: "영혼 모래",
+    solid: true,
+    transparent: false,
+    fluid: false,
+    swatch: "#6e5042",
+    tiles: allFaces(TileId.SoulSand),
+    hardness: 0.5,
+    drops: "soul_sand",
+    preferredTool: "shovel",
+    placeableItem: "soul_sand"
+  },
+  [BlockType.Basalt]: {
+    id: "basalt",
+    displayName: "현무암",
+    solid: true,
+    transparent: false,
+    fluid: false,
+    swatch: "#4a4648",
+    tiles: allFaces(TileId.Basalt),
+    hardness: 1.25,
+    drops: "basalt",
+    preferredTool: "pickaxe",
+    requiredTool: "pickaxe",
+    requiredTier: "wood",
+    placeableItem: "basalt"
+  },
+  [BlockType.QuartzOre]: {
+    id: "quartz_ore",
+    displayName: "네더 석영 광석",
+    solid: true,
+    transparent: false,
+    fluid: false,
+    swatch: "#b36f67",
+    tiles: allFaces(TileId.QuartzOre),
+    hardness: 3,
+    drops: "nether_quartz",
+    preferredTool: "pickaxe",
+    requiredTool: "pickaxe",
+    requiredTier: "wood",
+    placeableItem: "quartz_ore"
+  },
+  [BlockType.NetherGoldOre]: {
+    id: "nether_gold_ore",
+    displayName: "네더 금 광석",
+    solid: true,
+    transparent: false,
+    fluid: false,
+    swatch: "#ad5b35",
+    tiles: allFaces(TileId.NetherGoldOre),
+    hardness: 3,
+    drops: "gold_nugget",
+    preferredTool: "pickaxe",
+    requiredTool: "pickaxe",
+    requiredTier: "wood",
+    placeableItem: "nether_gold_ore"
   }
 };
 
@@ -578,7 +682,8 @@ export const HOTBAR_BLOCKS: BlockType[] = [
   BlockType.Log,
   BlockType.Leaves,
   BlockType.CoalOre,
-  BlockType.Furnace
+  BlockType.Furnace,
+  BlockType.Netherrack
 ];
 
 export function blockKey(x: number, y: number, z: number): string {

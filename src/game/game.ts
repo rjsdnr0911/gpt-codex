@@ -47,6 +47,9 @@ import {
   SaveIndexV2,
   SaveSystem,
   SavedGameV1,
+  SavedBlock,
+  SavedEntity,
+  SavedPlayer,
   WorldSaveV2
 } from "./saveSystem";
 import { armorPoints, createSurvivalState, SurvivalController, SurvivalState } from "./survival";
@@ -68,6 +71,10 @@ interface MiningState {
   progress: number;
   block: BlockType;
 }
+
+type DimensionBlockMap = Partial<Record<DimensionId, SavedBlock[]>>;
+type DimensionEntityMap = Partial<Record<DimensionId, SavedEntity[]>>;
+type DimensionPlayerMap = Partial<Record<DimensionId, SavedPlayer>>;
 
 export class Game {
   private readonly root: HTMLElement;
@@ -115,6 +122,9 @@ export class Game {
   private lootedChests = new Set<string>();
   private questState: QuestState = createQuestState();
   private dimension: DimensionId = "overworld";
+  private dimensionModified: DimensionBlockMap = {};
+  private dimensionEntities: DimensionEntityMap = {};
+  private dimensionPlayers: DimensionPlayerMap = {};
   private portalTimer = 0;
   private mining: MiningState | null = null;
   private selectedItemTimer = 0;
@@ -250,12 +260,15 @@ export class Game {
       createdAt: now,
       updatedAt: now,
       modified: legacy.modified,
+      dimensionModified: { overworld: legacy.modified },
       player: legacy.player,
+      dimensionPlayers: { overworld: legacy.player },
       inventory,
       survival: createSurvivalState(spawn),
       unlockedRecipes: [],
       lootedChests: [],
       entities: [],
+      dimensionEntities: { overworld: [] },
       gameRules: { mobGriefing: true },
       dimension: "overworld",
       quests: createQuestState(),
@@ -265,14 +278,18 @@ export class Game {
 
   private loadPreviewWorld(): void {
     const seed = "codex-aurora";
-    this.replaceWorld(seed, [], WORLDGEN_VERSION);
+    this.dimension = "overworld";
+    this.dimensionModified = { overworld: [] };
+    this.dimensionEntities = { overworld: [] };
+    this.dimensionPlayers = {};
+    this.lootedChests.clear();
+    this.replaceWorld(seed, [], WORLDGEN_VERSION, "overworld");
     const spawn = this.world.findSpawn();
     this.player = new Player(this.camera, spawn);
     this.player.yaw = this.world.findScenicYaw(spawn);
     this.player.pitch = -0.08;
     this.inventory = createInventoryState();
     this.survival = new SurvivalController(createSurvivalState(spawn));
-    this.dimension = "overworld";
     this.questState = createQuestState();
     this.portalTimer = 0;
     this.world.ensureChunksAround(this.player.position);
@@ -280,18 +297,21 @@ export class Game {
 
   private loadWorld(save: WorldSaveV2, startPlaying: boolean): void {
     this.activeWorld = save;
-    this.replaceWorld(save.seed, save.modified, save.worldgenVersion ?? 2);
+    this.dimension = save.dimension ?? "overworld";
+    this.dimensionModified = this.normalizeDimensionModified(save);
+    this.dimensionEntities = this.normalizeDimensionEntities(save);
+    this.dimensionPlayers = this.normalizeDimensionPlayers(save);
+    this.replaceWorld(save.seed, this.dimensionModified[this.dimension] ?? [], save.worldgenVersion ?? 2, this.dimension);
     this.player = new Player(this.camera, this.world.findSpawn());
-    this.player.restore(save.player);
+    this.player.restore(this.dimensionPlayers[this.dimension] ?? save.player);
     this.inventory = normalizeInventory(save.inventory);
     this.input.selectedSlot = this.inventory.selectedHotbarSlot;
     this.survival = new SurvivalController({ ...save.survival });
     this.unlockedRecipes = new Set(save.unlockedRecipes);
     this.lootedChests = new Set(save.lootedChests ?? []);
-    this.dimension = save.dimension ?? "overworld";
     this.questState = normalizeQuestState(save.quests);
     this.portalTimer = 0;
-    this.mobs.restore(save.entities ?? []);
+    this.mobs.restore(this.dimensionEntities[this.dimension] ?? save.entities ?? []);
     this.world.ensureChunksAround(this.player.position);
     this.saveState = "준비됨";
     this.hud.setWorlds(this.worldSummaries());
@@ -300,23 +320,55 @@ export class Game {
     }
   }
 
-  private replaceWorld(seed: string, modified: WorldSaveV2["modified"], worldgenVersion = WORLDGEN_VERSION): void {
+  private replaceWorld(
+    seed: string,
+    modified: WorldSaveV2["modified"],
+    worldgenVersion = WORLDGEN_VERSION,
+    dimension: DimensionId = this.dimension
+  ): void {
     if (this.world) {
       this.scene.remove(this.world.group);
     }
 
     this.mobs.clear();
-    this.lootedChests.clear();
-    this.world = new World(seed, this.materials, worldgenVersion);
+    this.world = new World(seed, this.materials, worldgenVersion, dimension);
     this.world.setModifiedBlocks(modified);
     this.scene.add(this.world.group);
+  }
+
+  private normalizeDimensionModified(save: WorldSaveV2): DimensionBlockMap {
+    return {
+      overworld: save.dimensionModified?.overworld ?? save.modified ?? [],
+      nether: save.dimensionModified?.nether ?? [],
+      end: save.dimensionModified?.end ?? []
+    };
+  }
+
+  private normalizeDimensionEntities(save: WorldSaveV2): DimensionEntityMap {
+    return {
+      overworld: save.dimensionEntities?.overworld ?? (save.dimension === "overworld" || !save.dimension ? save.entities ?? [] : []),
+      nether: save.dimensionEntities?.nether ?? (save.dimension === "nether" ? save.entities ?? [] : []),
+      end: save.dimensionEntities?.end ?? (save.dimension === "end" ? save.entities ?? [] : [])
+    };
+  }
+
+  private normalizeDimensionPlayers(save: WorldSaveV2): DimensionPlayerMap {
+    return {
+      overworld: save.dimensionPlayers?.overworld ?? (save.dimension === "overworld" || !save.dimension ? save.player : undefined),
+      nether: save.dimensionPlayers?.nether ?? (save.dimension === "nether" ? save.player : undefined),
+      end: save.dimensionPlayers?.end ?? (save.dimension === "end" ? save.player : undefined)
+    };
   }
 
   private async createWorld(name: string, seed: string): Promise<void> {
     this.setMode("loading");
     const now = Date.now();
     const id = `world-${now.toString(36)}`;
-    this.replaceWorld(seed, [], WORLDGEN_VERSION);
+    this.dimension = "overworld";
+    this.dimensionModified = { overworld: [] };
+    this.dimensionEntities = { overworld: [] };
+    this.dimensionPlayers = {};
+    this.replaceWorld(seed, [], WORLDGEN_VERSION, "overworld");
     const spawn = this.world.findSpawn();
     const player = new Player(this.camera, spawn);
     player.yaw = this.world.findScenicYaw(spawn);
@@ -331,12 +383,15 @@ export class Game {
       createdAt: now,
       updatedAt: now,
       modified: [],
+      dimensionModified: { overworld: [] },
       player: player.snapshot(0),
+      dimensionPlayers: { overworld: player.snapshot(0) },
       inventory: createInventoryState(),
       survival,
       unlockedRecipes: [],
       lootedChests: [],
       entities: [],
+      dimensionEntities: { overworld: [] },
       gameRules: { mobGriefing: true },
       dimension: "overworld",
       quests: createQuestState(),
@@ -390,12 +445,15 @@ export class Game {
       createdAt: now,
       updatedAt: now,
       modified: [],
+      dimensionModified: { overworld: [] },
       player: player.snapshot(0),
+      dimensionPlayers: { overworld: player.snapshot(0) },
       inventory: createInventoryState(),
       survival: createSurvivalState(spawn),
       unlockedRecipes: [],
       lootedChests: [],
       entities: [],
+      dimensionEntities: { overworld: [] },
       gameRules: { mobGriefing: true },
       dimension: "overworld",
       quests: createQuestState(),
@@ -616,6 +674,8 @@ export class Game {
       this.recordQuestEvent({ type: "discover", target: "lava" });
     } else if (this.selectedHit?.block === BlockType.RuinedPortalDebris || this.selectedHit?.block === BlockType.Obsidian) {
       this.recordQuestEvent({ type: "discover", target: "ruined_portal" });
+    } else if (this.selectedHit?.block === BlockType.NetherBrick) {
+      this.recordQuestEvent({ type: "discover", target: "fortress" });
     }
     this.updateHighlight();
 
@@ -1034,6 +1094,10 @@ export class Game {
       dropCount = 4 + Math.floor(Math.random() * 5);
     }
 
+    if (hit.block === BlockType.NetherGoldOre) {
+      dropCount = 2 + Math.floor(Math.random() * 5);
+    }
+
     if (drop) {
       const remaining = addStack(this.inventory, { item: drop, count: dropCount });
       this.hud.showToast(remaining ? "인벤토리가 가득 찼습니다" : `${ITEM_DEFINITIONS[drop].name} 획득`);
@@ -1095,6 +1159,16 @@ export class Game {
       { item: "coal", count: 2 + Math.floor(roll(0xc0a1) * 4) },
       { item: "torch", count: 2 + Math.floor(roll(0x70c4) * 5) }
     ];
+
+    if (this.dimension === "nether") {
+      loot.push({ item: "gold_nugget", count: 3 + Math.floor(roll(0x601d) * 8) });
+      if (roll(0xb1a2e) > 0.46) {
+        loot.push({ item: "blaze_powder", count: 1 + Math.floor(roll(0xb1a2f) * 2) });
+      }
+      if (roll(0xe0d3) > 0.78) {
+        loot.push({ item: "ender_pearl", count: 1 });
+      }
+    }
 
     if (roll(0xa770) > 0.35) {
       loot.push({ item: "arrow", count: 2 + Math.floor(roll(0xa771) * 6) });
@@ -1696,11 +1770,6 @@ export class Game {
   }
 
   private updatePortalTravel(delta: number): void {
-    if (this.dimension !== "overworld") {
-      this.portalTimer = 0;
-      return;
-    }
-
     if (!isInPortal(this.world, this.player.position.x, this.player.position.y, this.player.position.z)) {
       this.portalTimer = 0;
       return;
@@ -1711,11 +1780,108 @@ export class Game {
       return;
     }
 
-    this.dimension = "nether";
+    const target: DimensionId = this.dimension === "nether" ? "overworld" : "nether";
+    this.travelToDimension(target);
+  }
+
+  private travelToDimension(target: DimensionId): void {
+    if (!this.activeWorld) {
+      return;
+    }
+
+    this.storeCurrentDimensionState();
+    this.dimension = target;
     this.portalTimer = 0;
-    this.recordQuestEvent({ type: "dimension", target: "nether" });
-    this.hud.showToast("지옥 차원 진입 기반이 열렸습니다");
+    this.replaceWorld(
+      this.activeWorld.seed,
+      this.dimensionModified[target] ?? [],
+      this.activeWorld.worldgenVersion ?? this.world.worldgenVersion,
+      target
+    );
+
+    const savedPlayer = this.dimensionPlayers[target];
+    this.player = new Player(this.camera, this.world.findSpawn());
+    if (savedPlayer) {
+      this.player.restore(savedPlayer);
+      this.nudgeOutOfPortal();
+    } else {
+      const arrival = target === "nether" ? this.ensureArrivalPortal(this.world.findSpawn()) : this.world.findSpawn();
+      this.player.position.copy(arrival);
+      this.player.yaw = this.world.findScenicYaw(arrival);
+      this.player.pitch = target === "nether" ? -0.02 : -0.08;
+    }
+
+    this.world.ensureChunksAround(this.player.position);
+    this.mobs.restore(this.dimensionEntities[target] ?? []);
+
+    if (target === "nether") {
+      this.recordQuestEvent({ type: "dimension", target: "nether" });
+      this.hud.showToast("지옥으로 이동했습니다. 귀환 포털 위치를 기억하세요");
+    } else {
+      this.hud.showToast("지상으로 돌아왔습니다");
+    }
+
     this.queueSave();
+  }
+
+  private storeCurrentDimensionState(): void {
+    this.dimensionModified[this.dimension] = this.world.exportModifiedBlocks();
+    this.dimensionEntities[this.dimension] = this.mobs.snapshot();
+    this.dimensionPlayers[this.dimension] = this.player.snapshot(this.inventory.selectedHotbarSlot);
+  }
+
+  private ensureArrivalPortal(near: THREE.Vector3): THREE.Vector3 {
+    const baseX = Math.floor(near.x) - 1;
+    const baseY = clamp(Math.floor(near.y), 8, WORLD_HEIGHT - 8);
+    const z = Math.floor(near.z) - 1;
+
+    for (let dz = -3; dz <= 3; dz += 1) {
+      for (let dx = -4; dx <= 5; dx += 1) {
+        this.world.setBlock(baseX + dx, baseY - 1, z + dz, BlockType.Obsidian);
+        for (let dy = 0; dy <= 4; dy += 1) {
+          this.world.setBlock(baseX + dx, baseY + dy, z + dz, BlockType.Air);
+        }
+      }
+    }
+
+    for (let y = 0; y <= 4; y += 1) {
+      this.world.setBlock(baseX - 1, baseY + y, z, BlockType.Obsidian);
+      this.world.setBlock(baseX + 2, baseY + y, z, BlockType.Obsidian);
+    }
+
+    for (let x = -1; x <= 2; x += 1) {
+      this.world.setBlock(baseX + x, baseY - 1, z, BlockType.Obsidian);
+      this.world.setBlock(baseX + x, baseY + 3, z, BlockType.Obsidian);
+    }
+
+    for (let y = 0; y <= 2; y += 1) {
+      this.world.setBlock(baseX, baseY + y, z, BlockType.NetherPortal);
+      this.world.setBlock(baseX + 1, baseY + y, z, BlockType.NetherPortal);
+    }
+
+    this.dimensionModified[this.dimension] = this.world.exportModifiedBlocks();
+    return new THREE.Vector3(baseX + 0.5, baseY, z - 1.75);
+  }
+
+  private nudgeOutOfPortal(): void {
+    if (!isInPortal(this.world, this.player.position.x, this.player.position.y, this.player.position.z)) {
+      return;
+    }
+
+    const offsets = [
+      new THREE.Vector3(0, 0, -2.35),
+      new THREE.Vector3(0, 0, 2.35),
+      new THREE.Vector3(2.35, 0, 0),
+      new THREE.Vector3(-2.35, 0, 0)
+    ];
+
+    for (const offset of offsets) {
+      const next = this.player.position.clone().add(offset);
+      if (!isInPortal(this.world, next.x, next.y, next.z)) {
+        this.player.position.copy(next);
+        return;
+      }
+    }
   }
 
   private queueSave(): void {
@@ -1744,18 +1910,25 @@ export class Game {
           addStack(inventoryForSave, { ...stack });
         }
       }
+      this.storeCurrentDimensionState();
+      const dimensionModified = { ...this.dimensionModified };
+      const dimensionPlayers = { ...this.dimensionPlayers };
+      const dimensionEntities = { ...this.dimensionEntities };
       const save: WorldSaveV2 = {
         ...this.activeWorld,
         version: 4,
         worldgenVersion: this.activeWorld.worldgenVersion ?? this.world.worldgenVersion,
         updatedAt: now,
-        modified: this.world.exportModifiedBlocks(),
+        modified: dimensionModified.overworld ?? [],
+        dimensionModified,
         player: this.player.snapshot(this.inventory.selectedHotbarSlot),
+        dimensionPlayers,
         inventory: inventoryForSave,
         survival: { ...this.survival.state },
         unlockedRecipes: [...this.unlockedRecipes],
         lootedChests: [...this.lootedChests],
-        entities: this.mobs.snapshot(),
+        entities: dimensionEntities[this.dimension] ?? [],
+        dimensionEntities,
         gameRules: this.activeWorld.gameRules ?? { mobGriefing: true },
         dimension: this.dimension,
         quests: normalizeQuestState(this.questState),

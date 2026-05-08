@@ -3,7 +3,7 @@ import { TileId } from "./blocks";
 
 const TILE_SIZE = 32;
 const COLUMNS = 6;
-const ROWS = 6;
+const ROWS = 7;
 const ATLAS_WIDTH = COLUMNS * TILE_SIZE;
 const ATLAS_HEIGHT = ROWS * TILE_SIZE;
 
@@ -335,6 +335,62 @@ function drawPortal(ctx: CanvasRenderingContext2D): void {
   }
 }
 
+function drawNetherrack(ctx: CanvasRenderingContext2D): void {
+  drawDitheredTile(ctx, TileId.Netherrack, { r: 126, g: 47, b: 45 }, 42, 2);
+  const [ox, oy] = tileOrigin(TileId.Netherrack);
+  ctx.strokeStyle = "rgba(50, 16, 20, 0.42)";
+  ctx.lineWidth = 1;
+
+  for (let line = 0; line < 10; line += 1) {
+    const x = Math.floor(pseudoNoise(TileId.Netherrack, line, 5) * TILE_SIZE);
+    const y = Math.floor(pseudoNoise(TileId.Netherrack, line, 11) * TILE_SIZE);
+    ctx.beginPath();
+    ctx.moveTo(ox + x, oy + y);
+    ctx.lineTo(ox + x + (pseudoNoise(TileId.Netherrack, line, 19) - 0.5) * 18, oy + y + 8);
+    ctx.stroke();
+  }
+}
+
+function drawNetherBrick(ctx: CanvasRenderingContext2D): void {
+  drawDitheredTile(ctx, TileId.NetherBrick, { r: 61, g: 27, b: 36 }, 24, 2);
+  const [ox, oy] = tileOrigin(TileId.NetherBrick);
+  ctx.fillStyle = "rgba(18, 9, 13, 0.62)";
+  for (let y = 7; y < TILE_SIZE; y += 8) {
+    ctx.fillRect(ox, oy + y, TILE_SIZE, 2);
+  }
+  for (let row = 0; row < 4; row += 1) {
+    const offset = row % 2 === 0 ? 0 : 10;
+    for (let x = offset; x < TILE_SIZE; x += 16) {
+      ctx.fillRect(ox + x, oy + row * 8, 2, 8);
+    }
+  }
+}
+
+function drawSoulSand(ctx: CanvasRenderingContext2D): void {
+  drawDitheredTile(ctx, TileId.SoulSand, { r: 110, g: 80, b: 66 }, 34, 2);
+  const [ox, oy] = tileOrigin(TileId.SoulSand);
+  ctx.fillStyle = "rgba(38, 29, 27, 0.44)";
+  for (let index = 0; index < 5; index += 1) {
+    const x = 5 + Math.floor(pseudoNoise(TileId.SoulSand, index, 3) * 18);
+    const y = 5 + Math.floor(pseudoNoise(TileId.SoulSand, index, 9) * 18);
+    ctx.fillRect(ox + x, oy + y, 4, 7);
+    ctx.fillRect(ox + x + 8, oy + y, 4, 7);
+    ctx.fillRect(ox + x + 4, oy + y + 8, 5, 3);
+  }
+}
+
+function drawBasalt(ctx: CanvasRenderingContext2D): void {
+  drawDitheredTile(ctx, TileId.Basalt, { r: 72, g: 68, b: 70 }, 26, 2);
+  const [ox, oy] = tileOrigin(TileId.Basalt);
+  ctx.fillStyle = "rgba(23, 22, 24, 0.36)";
+  for (let x = 4; x < TILE_SIZE; x += 7) {
+    ctx.fillRect(ox + x, oy, 2, TILE_SIZE);
+  }
+  ctx.fillStyle = "rgba(190, 184, 178, 0.18)";
+  ctx.fillRect(ox + 8, oy + 2, 2, 28);
+  ctx.fillRect(ox + 22, oy + 2, 2, 28);
+}
+
 export function createTextureAtlas(): THREE.CanvasTexture {
   const canvas = document.createElement("canvas");
   canvas.width = ATLAS_WIDTH;
@@ -379,6 +435,12 @@ export function createTextureAtlas(): THREE.CanvasTexture {
   drawFire(ctx);
   drawPortal(ctx);
   drawObsidian(ctx, TileId.RuinedPortalDebris);
+  drawNetherrack(ctx);
+  drawNetherBrick(ctx);
+  drawSoulSand(ctx);
+  drawBasalt(ctx);
+  drawOre(ctx, TileId.QuartzOre, "#e8dfcf", "#fff8e8");
+  drawOre(ctx, TileId.NetherGoldOre, "#f2c84b", "#ffe899");
 
   const texture = new THREE.CanvasTexture(canvas);
   texture.magFilter = THREE.NearestFilter;

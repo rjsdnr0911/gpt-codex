@@ -22,4 +22,23 @@ describe("world generation", () => {
     expect(counts.get(BlockType.IronOre) ?? 0).toBeGreaterThan(8);
     expect(counts.get(BlockType.DiamondOre) ?? 0).toBeGreaterThan(0);
   });
+
+  it("generates a distinct nether with lava seas and nether ore", () => {
+    const world = new World("nether-test-seed", {} as never, WORLDGEN_VERSION, "nether");
+    const counts = new Map<BlockType, number>();
+
+    for (let z = -40; z <= 40; z += 1) {
+      for (let x = -40; x <= 40; x += 1) {
+        for (let y = 4; y < 62; y += 1) {
+          const block = world.getNaturalBlock(x, y, z);
+          counts.set(block, (counts.get(block) ?? 0) + 1);
+        }
+      }
+    }
+
+    expect(counts.get(BlockType.Netherrack) ?? 0).toBeGreaterThan(1000);
+    expect(counts.get(BlockType.Lava) ?? 0).toBeGreaterThan(50);
+    expect(counts.get(BlockType.Air) ?? 0).toBeGreaterThan(100);
+    expect((counts.get(BlockType.QuartzOre) ?? 0) + (counts.get(BlockType.NetherGoldOre) ?? 0)).toBeGreaterThan(5);
+  });
 });

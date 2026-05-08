@@ -1025,7 +1025,13 @@ export class Hud {
       bucket: ["제작", "상자 보급"],
       water_bucket: ["양동이로 물 담기"],
       lava_bucket: ["양동이로 용암 담기"],
-      flint_and_steel: ["제작"]
+      flint_and_steel: ["제작"],
+      blaze_rod: ["블레이즈"],
+      blaze_powder: ["블레이즈 막대 제작", "지옥 요새 상자"],
+      ender_pearl: ["엔더맨", "지옥 요새 상자"],
+      eye_of_ender: ["제작"],
+      gold_nugget: ["네더 금 광석", "지옥 요새 상자"],
+      nether_quartz: ["네더 석영 광석"]
     };
     return [...blockSources, ...(mobSources[item] ?? [])];
   }

@@ -190,6 +190,37 @@ const BASE_RECIPES: Recipe[] = [
     result: { item: "bread", count: 1 },
     category: "food",
     unlocksBy: ["apple"]
+  },
+  {
+    id: "blaze_powder",
+    name: "블레이즈 가루",
+    size: 2,
+    type: "shapeless",
+    ingredients: { blaze_rod: 1 },
+    result: { item: "blaze_powder", count: 2 },
+    category: "items",
+    unlocksBy: ["blaze_rod"]
+  },
+  {
+    id: "eye_of_ender",
+    name: "엔더의 눈",
+    size: 2,
+    type: "shapeless",
+    ingredients: { blaze_powder: 1, ender_pearl: 1 },
+    result: { item: "eye_of_ender", count: 1 },
+    category: "items",
+    unlocksBy: ["blaze_powder", "ender_pearl"]
+  },
+  {
+    id: "gold_ingot_from_nuggets",
+    name: "금 주괴",
+    size: 3,
+    type: "shaped",
+    pattern: ["NNN", "NNN", "NNN"],
+    key: { N: "gold_nugget" },
+    result: { item: "gold_ingot", count: 1 },
+    category: "items",
+    unlocksBy: ["gold_nugget"]
   }
 ];
 

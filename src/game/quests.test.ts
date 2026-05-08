@@ -47,4 +47,49 @@ describe("quests", () => {
 
     expect(completed.map((quest) => quest.id)).toContain("main_enter_nether");
   });
+
+  it("continues the main quest line through blaze powder and the first eye of ender", () => {
+    const inventory = createInventoryState();
+    const quests = createQuestState();
+    quests.completed.push(
+      "main_get_log",
+      "main_make_planks",
+      "main_make_crafting_table",
+      "main_make_wooden_pickaxe",
+      "main_mine_stone",
+      "main_make_stone_pickaxe",
+      "main_get_coal",
+      "main_make_torch",
+      "main_mine_iron",
+      "main_smelt_iron",
+      "main_make_iron_pickaxe",
+      "main_get_diamond",
+      "main_make_diamond_pickaxe",
+      "main_find_lava",
+      "main_make_bucket",
+      "main_make_obsidian",
+      "main_mine_obsidian",
+      "main_make_flint_steel",
+      "main_ignite_portal",
+      "main_enter_nether"
+    );
+
+    let completed = applyQuestEvent(quests, { type: "discover", target: "fortress" }, inventory, "nether");
+    expect(completed.map((quest) => quest.id)).toContain("road_find_fortress");
+
+    completed = applyQuestEvent(quests, { type: "mob_killed", target: "블레이즈" }, inventory, "nether");
+    expect(completed.map((quest) => quest.id)).toContain("road_kill_blaze");
+
+    addStack(inventory, { item: "blaze_powder", count: 2 });
+    completed = applyQuestEvent(quests, { type: "crafted", target: "blaze_powder", amount: 2 }, inventory, "nether");
+    expect(completed.map((quest) => quest.id)).toContain("road_make_blaze_powder");
+
+    addStack(inventory, { item: "ender_pearl", count: 1 });
+    completed = syncQuestState(quests, inventory, "nether");
+    expect(completed.map((quest) => quest.id)).toContain("road_kill_enderman");
+
+    addStack(inventory, { item: "eye_of_ender", count: 1 });
+    completed = applyQuestEvent(quests, { type: "crafted", target: "eye_of_ender" }, inventory, "nether");
+    expect(completed.map((quest) => quest.id)).toContain("road_make_eye");
+  });
 });
