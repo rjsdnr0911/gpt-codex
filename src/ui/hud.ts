@@ -3,6 +3,7 @@ import { HOTBAR_START, InventoryState } from "../game/inventory";
 import { EquipmentSlot, ITEM_DEFINITIONS, ItemId, ItemStack, ToolKind, ToolTier } from "../game/items";
 import { Recipe } from "../game/recipes";
 import { EndBossStats } from "../game/endBoss";
+import { itemIconDataUrl } from "./itemIcon";
 import {
   DimensionId,
   getActiveMainQuest,
@@ -286,7 +287,7 @@ export class Hud {
     this.bossBar.innerHTML = "";
     const title = document.createElement("div");
     title.className = "boss-title";
-    title.textContent = `${boss.name} · 수정 ${boss.crystals}개`;
+    title.textContent = `${boss.name} · ${boss.phaseKo} · 수정 ${boss.crystals}개`;
     const meter = document.createElement("div");
     meter.className = "boss-meter";
     const fill = document.createElement("span");
@@ -328,6 +329,11 @@ export class Hud {
     const progress = document.createElement("span");
     progress.textContent = questProgressText(quest, this.stats!.questState);
     line.append(label, progress);
+    if (main) {
+      const guide = document.createElement("em");
+      guide.textContent = quest.descriptionKo;
+      line.append(guide);
+    }
     return line;
   }
 
@@ -873,6 +879,7 @@ export class Hud {
     }
 
     const relatedQuests = questItemUsage(item.id);
+    const progressionTip = this.progressionTip(item.id);
     if (relatedQuests.length > 0) {
       detail.append(this.makeCatalogSectionTitle("관련 퀘스트"));
       const questList = document.createElement("div");
@@ -891,7 +898,15 @@ export class Hud {
       detail.append(nextUse);
     }
 
-    if (recipes.length === 0 && smelting.length === 0 && sources.length === 0 && relatedQuests.length === 0) {
+    if (progressionTip) {
+      detail.append(this.makeCatalogSectionTitle("추천 행동"));
+      const tip = document.createElement("div");
+      tip.className = "catalog-next-use";
+      tip.textContent = progressionTip;
+      detail.append(tip);
+    }
+
+    if (recipes.length === 0 && smelting.length === 0 && sources.length === 0 && relatedQuests.length === 0 && !progressionTip) {
       const noRecipe = document.createElement("div");
       noRecipe.className = "catalog-empty";
       noRecipe.textContent = "아직 제작법은 없지만, 월드 탐험이나 다음 시스템에서 쓰일 수 있는 구현된 아이템입니다.";
@@ -1074,6 +1089,29 @@ export class Hud {
       nether_quartz: ["네더 석영 광석"]
     };
     return [...blockSources, ...(mobSources[item] ?? [])];
+  }
+
+  private progressionTip(item: ItemId): string | null {
+    const tips: Partial<Record<ItemId, string>> = {
+      log: "첫 진행은 원목을 판자로 바꾸고, 제작대와 나무 곡괭이를 만드는 것입니다.",
+      stone: "돌 곡괭이와 화로의 기본 재료입니다. 철을 캐기 전 반드시 충분히 챙겨 두세요.",
+      coal: "횃불과 제련 연료입니다. 동굴 탐험 전에 횃불 16개 이상을 목표로 하세요.",
+      iron_ingot: "양동이, 방패, 철 곡괭이로 이어집니다. 다이아/포털 준비의 중심 재료입니다.",
+      diamond: "다이아 곡괭이를 만들면 흑요석을 캐서 지옥문과 엔딩 루프를 열 수 있습니다.",
+      obsidian: "4x5 이상 프레임을 만들고 부싯돌과 부시로 점화하면 지옥문이 열립니다.",
+      blaze_rod: "블레이즈 가루로 바꿔 엔더의 눈 제작에 사용하세요.",
+      blaze_powder: "엔더 진주와 조합하면 엔더의 눈이 됩니다. 요새 추적의 핵심입니다.",
+      ender_pearl: "블레이즈 가루와 합쳐 엔더의 눈을 만들거나, 이동 보조용으로 사용할 수 있습니다.",
+      eye_of_ender: "우클릭으로 던지면 요새 방향을 알려줍니다. 요새 포털 방에서 프레임에 꽂으세요.",
+      end_portal_frame: "12개 프레임에 눈이 모두 들어가면 엔드 포털이 열립니다.",
+      end_crystal: "드래곤을 회복시킵니다. 활로 먼저 깨면 보스전이 훨씬 쉬워집니다.",
+      dragon_egg: "엔딩 루프 완료 보상입니다. 이후 업데이트에서는 전리품/장식 진행으로 확장할 수 있습니다.",
+      bow: "엔드 수정과 스켈레톤 견제에 필수입니다. 드래곤전 전에 화살을 충분히 준비하세요.",
+      arrow: "엔드 수정과 드래곤에게 쓰는 원거리 자원입니다. 드래곤전 전 32개 이상을 권장합니다.",
+      shield: "스켈레톤과 크리퍼 대응용입니다. 요새/엔드 준비 전에 하나 들고 가면 안정적입니다.",
+      bread: "초반 회복용 식량입니다. 동굴과 지옥 탐험 전 10개 이상을 챙기면 좋습니다."
+    };
+    return tips[item] ?? null;
   }
 
   private renderHotbar(): void {
@@ -1286,8 +1324,9 @@ export class Hud {
   private makeItemIcon(stack: ItemStack): HTMLSpanElement {
     const def = ITEM_DEFINITIONS[stack.item];
     const icon = document.createElement("span");
-    icon.className = `item-icon item-${stack.item}`;
+    icon.className = `item-icon pixel-art item-${stack.item}`;
     icon.style.setProperty("--item-color", def.color);
+    icon.style.backgroundImage = `url("${itemIconDataUrl(stack.item)}")`;
     return icon;
   }
 
@@ -1415,7 +1454,7 @@ export class Hud {
     const smelting = stats.smeltingRecipes
       .map((entry) => `${entry.recipe.id}:${entry.smeltable ? 1 : 0}`)
       .join("|");
-    const boss = stats.boss ? `${stats.boss.health}:${stats.boss.crystals}` : "-";
+    const boss = stats.boss ? `${stats.boss.health}:${stats.boss.crystals}:${stats.boss.phaseKo}` : "-";
     const quests = `${stats.dimension}|${stats.questState.activeMainQuestId ?? "-"}|${stats.questState.trackedSideQuestIds.join(",")}|${stats.questState.completed.join(",")}|${Object.entries(stats.questState.progress)
       .map(([key, value]) => `${key}:${value}`)
       .join(",")}`;

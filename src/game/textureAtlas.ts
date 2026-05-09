@@ -93,6 +93,26 @@ function drawStoneCracks(ctx: CanvasRenderingContext2D, tile: TileId): void {
   }
 }
 
+function drawPixelDetails(ctx: CanvasRenderingContext2D, tile: TileId, dark: string, light: string, count: number): void {
+  const [ox, oy] = tileOrigin(tile);
+  for (let index = 0; index < count; index += 1) {
+    const x = Math.floor(pseudoNoise(tile, index, 41) * 29) + 1;
+    const y = Math.floor(pseudoNoise(tile, index, 53) * 29) + 1;
+    ctx.fillStyle = index % 3 === 0 ? light : dark;
+    ctx.fillRect(ox + x, oy + y, 2 + (index % 2), 2);
+  }
+}
+
+function drawGrassTopDetails(ctx: CanvasRenderingContext2D): void {
+  const [ox, oy] = tileOrigin(TileId.GrassTop);
+  for (let index = 0; index < 32; index += 1) {
+    const x = Math.floor(pseudoNoise(TileId.GrassTop, index, 61) * 30) + 1;
+    const y = Math.floor(pseudoNoise(TileId.GrassTop, index, 67) * 30) + 1;
+    ctx.fillStyle = index % 4 === 0 ? "rgba(160, 218, 98, 0.55)" : "rgba(42, 104, 42, 0.42)";
+    ctx.fillRect(ox + x, oy + y, 2, 4);
+  }
+}
+
 function drawLogTop(ctx: CanvasRenderingContext2D): void {
   drawDitheredTile(ctx, TileId.LogTop, { r: 154, g: 111, b: 62 }, 28, 2);
   const [ox, oy] = tileOrigin(TileId.LogTop);
@@ -582,11 +602,15 @@ export function createTextureAtlas(): THREE.CanvasTexture {
 
   ctx.imageSmoothingEnabled = false;
   drawDitheredTile(ctx, TileId.GrassTop, { r: 83, g: 151, b: 67 }, 34, 2);
+  drawGrassTopDetails(ctx);
   drawGrassSide(ctx);
   drawDitheredTile(ctx, TileId.Dirt, { r: 119, g: 83, b: 52 }, 38, 2);
+  drawPixelDetails(ctx, TileId.Dirt, "rgba(63, 37, 21, 0.42)", "rgba(190, 133, 78, 0.32)", 22);
   drawDitheredTile(ctx, TileId.Stone, { r: 129, g: 137, b: 135 }, 34, 2);
   drawStoneCracks(ctx, TileId.Stone);
+  drawPixelDetails(ctx, TileId.Stone, "rgba(56, 64, 64, 0.34)", "rgba(194, 203, 200, 0.25)", 18);
   drawDitheredTile(ctx, TileId.Sand, { r: 214, g: 199, b: 132 }, 24, 2);
+  drawPixelDetails(ctx, TileId.Sand, "rgba(145, 120, 69, 0.26)", "rgba(255, 240, 166, 0.42)", 16);
   drawWater(ctx);
   drawLogSide(ctx);
   drawLogTop(ctx);

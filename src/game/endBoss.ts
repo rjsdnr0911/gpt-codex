@@ -8,6 +8,7 @@ export interface EndBossStats {
   health: number;
   maxHealth: number;
   crystals: number;
+  phaseKo: string;
 }
 
 export interface EndBossUpdate {
@@ -40,6 +41,7 @@ export class EndBossController {
   private deathTimer = 0;
   private healingCrystalKey: string | null = null;
   private readonly dragonPosition = new THREE.Vector3(0, 54, 0);
+  private phaseKo = "순항";
 
   constructor() {
     this.group.name = "End boss";
@@ -60,6 +62,10 @@ export class EndBossController {
       this.health = DRAGON_MAX_HEALTH;
       this.deathTimer = 0;
     }
+
+    if (this.active) {
+      this.dragon.scale.setScalar(1);
+    }
   }
 
   get stats(): EndBossStats | null {
@@ -71,14 +77,20 @@ export class EndBossController {
       name: "엔더 드래곤",
       health: this.health,
       maxHealth: DRAGON_MAX_HEALTH,
-      crystals: this.activeCrystals().length
+      crystals: this.activeCrystals().length,
+      phaseKo: this.phaseKo
     };
   }
 
   update(delta: number, playerPosition: THREE.Vector3, elapsed: number): EndBossUpdate {
     if (!this.active || !this.world) {
-      this.group.visible = this.deathTimer > 0;
-      this.deathTimer = Math.max(0, this.deathTimer - delta);
+      if (this.deathTimer > 0) {
+        this.group.visible = true;
+        this.animateDeath(delta, elapsed);
+        this.deathTimer = Math.max(0, this.deathTimer - delta);
+      } else {
+        this.group.visible = false;
+      }
       return { damage: 0 };
     }
 
@@ -92,19 +104,28 @@ export class EndBossController {
       this.health = Math.min(DRAGON_MAX_HEALTH, this.health + 1);
     }
 
-    const phase = Math.sin(elapsed * 0.095) > 0.72 ? "swoop" : "orbit";
-    const angle = elapsed * 0.24;
+    const healthRatio = this.health / DRAGON_MAX_HEALTH;
+    const cycleLength = healthRatio < 0.38 ? 16 : 22;
+    const cycle = elapsed % cycleLength;
+    const phase = cycle < 9 ? "orbit" : cycle < 13 ? "perch" : "charge";
+    this.phaseKo = phase === "orbit" ? "순항" : phase === "perch" ? "중앙 착지" : "돌진";
+    const angle = elapsed * (healthRatio < 0.38 ? 0.34 : 0.24);
     const target = new THREE.Vector3();
 
-    if (phase === "swoop") {
-      target.set(playerPosition.x * 0.35, clamp(playerPosition.y + 5.5, 40, 60), playerPosition.z * 0.35);
+    if (phase === "charge") {
+      target.set(playerPosition.x * 0.72, clamp(playerPosition.y + 3.4, 38, 58), playerPosition.z * 0.72);
+    } else if (phase === "perch") {
+      const perchY = clamp(this.world.terrainHeight(0, 0) + 7, 38, 48);
+      target.set(Math.sin(elapsed * 1.4) * 4, perchY, Math.cos(elapsed * 1.1) * 4);
     } else {
-      const radius = 30 + Math.sin(elapsed * 0.19) * 7;
+      const radius = 31 + Math.sin(elapsed * 0.19) * 7;
       target.set(Math.cos(angle) * radius, 51 + Math.sin(elapsed * 0.31) * 6, Math.sin(angle) * radius);
     }
 
-    this.dragonPosition.lerp(target, clamp(delta * 1.15, 0, 1));
+    const follow = phase === "charge" ? 2.5 : phase === "perch" ? 1.6 : 1.15;
+    this.dragonPosition.lerp(target, clamp(delta * follow, 0, 1));
     this.dragon.position.copy(this.dragonPosition);
+    this.dragon.scale.setScalar(1);
 
     const look = playerPosition.clone().sub(this.dragonPosition);
     this.dragon.rotation.y = Math.atan2(look.x, look.z);
@@ -113,9 +134,10 @@ export class EndBossController {
     this.updateHealingBeams(crystals);
 
     let damage = 0;
-    if (this.dragonPosition.distanceTo(playerPosition.clone().add(new THREE.Vector3(0, 1.1, 0))) < 3.2 && this.damageCooldown <= 0) {
-      damage = 8;
-      this.damageCooldown = 1.4;
+    const contactDistance = phase === "charge" ? 4.2 : phase === "perch" ? 3.8 : 3.2;
+    if (this.dragonPosition.distanceTo(playerPosition.clone().add(new THREE.Vector3(0, 1.1, 0))) < contactDistance && this.damageCooldown <= 0) {
+      damage = phase === "charge" ? 11 : phase === "perch" ? 7 : 8;
+      this.damageCooldown = phase === "charge" ? 1.15 : 1.4;
     }
 
     return { damage };
@@ -133,7 +155,7 @@ export class EndBossController {
     }
 
     const closest = origin.clone().add(direction.clone().multiplyScalar(projection));
-    if (closest.distanceTo(this.dragonPosition) > 3.1) {
+    if (closest.distanceTo(this.dragonPosition) > 4.0) {
       return { hit: false, killed: false };
     }
 
@@ -219,15 +241,19 @@ export class EndBossController {
   private createDragonMesh(): void {
     const body = mat("#17121d", "#3a1d4d", 0.18);
     const wing = mat("#211429", "#4e2670", 0.12);
+    const horn = mat("#e4d7aa");
     const eye = new THREE.MeshBasicMaterial({ color: "#c45cff" });
     addBox(this.dragon, [2.6, 1.0, 3.3], [0, 0, 0], body);
+    addBox(this.dragon, [1.6, 0.72, 1.4], [0, 0.18, -1.45], body);
     addBox(this.dragon, [1.15, 0.75, 1.15], [0, 0.28, -2.15], body);
+    addBox(this.dragon, [0.18, 0.42, 0.18], [-0.35, 0.78, -2.65], horn);
+    addBox(this.dragon, [0.18, 0.42, 0.18], [0.35, 0.78, -2.65], horn);
     addBox(this.dragon, [0.16, 0.1, 0.05], [-0.22, 0.38, -2.74], eye);
     addBox(this.dragon, [0.16, 0.1, 0.05], [0.22, 0.38, -2.74], eye);
     addBox(this.dragon, [0.45, 0.45, 4.2], [0, -0.08, 3.35], body, "tail");
     addBox(this.dragon, [0.22, 0.22, 2.5], [0, -0.06, 6.3], body, "tail");
-    addBox(this.dragon, [4.6, 0.12, 2.1], [-3.1, 0.15, 0.25], wing, "wing-left");
-    addBox(this.dragon, [4.6, 0.12, 2.1], [3.1, 0.15, 0.25], wing, "wing-right");
+    addBox(this.dragon, [5.2, 0.12, 2.3], [-3.45, 0.15, 0.25], wing, "wing-left");
+    addBox(this.dragon, [5.2, 0.12, 2.3], [3.45, 0.15, 0.25], wing, "wing-right");
     addBox(this.dragon, [0.34, 1.2, 0.34], [-0.72, -1, -0.85], body, "leg-a");
     addBox(this.dragon, [0.34, 1.2, 0.34], [0.72, -1, -0.85], body, "leg-b");
     addBox(this.dragon, [0.34, 1.2, 0.34], [-0.72, -1, 0.95], body, "leg-b");
@@ -249,6 +275,14 @@ export class EndBossController {
         child.rotation.x = -Math.sin(elapsed * 3.2) * 0.18;
       }
     }
+  }
+
+  private animateDeath(delta: number, elapsed: number): void {
+    const pulse = Math.max(0, this.deathTimer / 5);
+    this.dragon.rotation.y += delta * 2.3;
+    this.dragon.rotation.z = Math.sin(elapsed * 5.5) * 0.45;
+    this.dragon.position.y = this.dragonPosition.y + (1 - pulse) * 3.2;
+    this.dragon.scale.setScalar(0.92 + pulse * 0.16 + Math.sin(elapsed * 12) * 0.025);
   }
 }
 
