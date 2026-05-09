@@ -3,7 +3,7 @@ import { TileId } from "./blocks";
 
 const TILE_SIZE = 32;
 const COLUMNS = 6;
-const ROWS = 8;
+const ROWS = 9;
 const ATLAS_WIDTH = COLUMNS * TILE_SIZE;
 const ATLAS_HEIGHT = ROWS * TILE_SIZE;
 
@@ -468,6 +468,83 @@ function drawEndPortal(ctx: CanvasRenderingContext2D): void {
   }
 }
 
+function drawEndStone(ctx: CanvasRenderingContext2D, tile: TileId): void {
+  drawDitheredTile(ctx, tile, { r: 214, g: 210, b: 162 }, 30, 2);
+  const [ox, oy] = tileOrigin(tile);
+  ctx.fillStyle = "rgba(91, 83, 55, 0.22)";
+  for (let index = 0; index < 16; index += 1) {
+    const x = Math.floor(pseudoNoise(tile, index, 13) * 28) + 2;
+    const y = Math.floor(pseudoNoise(tile, index, 29) * 28) + 2;
+    ctx.fillRect(ox + x, oy + y, 3 + (index % 3), 2 + (index % 2));
+  }
+}
+
+function drawEndStoneBricks(ctx: CanvasRenderingContext2D): void {
+  drawEndStone(ctx, TileId.EndStoneBricks);
+  const [ox, oy] = tileOrigin(TileId.EndStoneBricks);
+  ctx.fillStyle = "rgba(97, 87, 54, 0.35)";
+  for (let y = 7; y < TILE_SIZE; y += 8) {
+    ctx.fillRect(ox, oy + y, TILE_SIZE, 2);
+  }
+  for (let row = 0; row < 4; row += 1) {
+    const offset = row % 2 === 0 ? 0 : 10;
+    for (let x = offset; x < TILE_SIZE; x += 16) {
+      ctx.fillRect(ox + x, oy + row * 8, 2, 8);
+    }
+  }
+}
+
+function drawBedrock(ctx: CanvasRenderingContext2D): void {
+  drawDitheredTile(ctx, TileId.Bedrock, { r: 54, g: 58, b: 60 }, 42, 2);
+  const [ox, oy] = tileOrigin(TileId.Bedrock);
+  ctx.fillStyle = "rgba(0, 0, 0, 0.34)";
+  for (let index = 0; index < 18; index += 1) {
+    const x = Math.floor(pseudoNoise(TileId.Bedrock, index, 31) * 28) + 1;
+    const y = Math.floor(pseudoNoise(TileId.Bedrock, index, 37) * 28) + 1;
+    ctx.fillRect(ox + x, oy + y, 4 + (index % 3), 4);
+  }
+  ctx.fillStyle = "rgba(255, 255, 255, 0.12)";
+  ctx.fillRect(ox + 4, oy + 5, 6, 3);
+  ctx.fillRect(ox + 21, oy + 18, 7, 2);
+}
+
+function drawEndCrystal(ctx: CanvasRenderingContext2D): void {
+  const [ox, oy] = tileOrigin(TileId.EndCrystal);
+  ctx.clearRect(ox, oy, TILE_SIZE, TILE_SIZE);
+  ctx.fillStyle = "rgba(132, 97, 165, 0.5)";
+  ctx.fillRect(ox + 8, oy + 23, 16, 5);
+  ctx.fillStyle = "rgba(255, 218, 255, 0.9)";
+  ctx.fillRect(ox + 11, oy + 7, 10, 10);
+  ctx.fillStyle = "rgba(133, 255, 203, 0.78)";
+  ctx.fillRect(ox + 14, oy + 10, 4, 4);
+  ctx.strokeStyle = "rgba(246, 232, 255, 0.7)";
+  ctx.lineWidth = 2;
+  ctx.strokeRect(ox + 9, oy + 5, 14, 14);
+  ctx.strokeStyle = "rgba(167, 92, 220, 0.78)";
+  ctx.beginPath();
+  ctx.moveTo(ox + 16, oy + 2);
+  ctx.lineTo(ox + 26, oy + 12);
+  ctx.lineTo(ox + 16, oy + 22);
+  ctx.lineTo(ox + 6, oy + 12);
+  ctx.closePath();
+  ctx.stroke();
+}
+
+function drawDragonEgg(ctx: CanvasRenderingContext2D): void {
+  const [ox, oy] = tileOrigin(TileId.DragonEgg);
+  ctx.clearRect(ox, oy, TILE_SIZE, TILE_SIZE);
+  ctx.fillStyle = "#17121d";
+  ctx.beginPath();
+  ctx.ellipse(ox + 16, oy + 18, 10, 13, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = "rgba(177, 92, 255, 0.62)";
+  ctx.fillRect(ox + 12, oy + 9, 3, 4);
+  ctx.fillRect(ox + 19, oy + 15, 3, 3);
+  ctx.fillRect(ox + 14, oy + 23, 4, 3);
+  ctx.fillStyle = "rgba(255, 255, 255, 0.12)";
+  ctx.fillRect(ox + 10, oy + 12, 3, 8);
+}
+
 function drawSoulSand(ctx: CanvasRenderingContext2D): void {
   drawDitheredTile(ctx, TileId.SoulSand, { r: 110, g: 80, b: 66 }, 34, 2);
   const [ox, oy] = tileOrigin(TileId.SoulSand);
@@ -551,6 +628,11 @@ export function createTextureAtlas(): THREE.CanvasTexture {
   drawEndPortalFrame(ctx, TileId.EndPortalFrame, false);
   drawEndPortalFrame(ctx, TileId.EndPortalFrameEye, true);
   drawEndPortal(ctx);
+  drawEndStone(ctx, TileId.EndStone);
+  drawEndStoneBricks(ctx);
+  drawBedrock(ctx);
+  drawEndCrystal(ctx);
+  drawDragonEgg(ctx);
 
   const texture = new THREE.CanvasTexture(canvas);
   texture.magFilter = THREE.NearestFilter;

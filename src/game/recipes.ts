@@ -246,6 +246,17 @@ const BASE_RECIPES: Recipe[] = [
     unlocksBy: ["book", "planks"]
   },
   {
+    id: "end_stone_bricks",
+    name: "엔드 스톤 벽돌",
+    size: 2,
+    type: "shaped",
+    pattern: ["EE", "EE"],
+    key: { E: "end_stone" },
+    result: { item: "end_stone_bricks", count: 4 },
+    category: "building",
+    unlocksBy: ["end_stone"]
+  },
+  {
     id: "bread",
     name: "빵",
     size: 3,

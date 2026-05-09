@@ -2,6 +2,7 @@ import { BLOCKS, BlockType } from "../game/blocks";
 import { HOTBAR_START, InventoryState } from "../game/inventory";
 import { EquipmentSlot, ITEM_DEFINITIONS, ItemId, ItemStack, ToolKind, ToolTier } from "../game/items";
 import { Recipe } from "../game/recipes";
+import { EndBossStats } from "../game/endBoss";
 import {
   DimensionId,
   getActiveMainQuest,
@@ -82,6 +83,7 @@ export interface HudStats {
   questState: QuestState;
   dimension: DimensionId;
   smeltingRecipes: Array<{ recipe: SmeltingRecipe; smeltable: boolean }>;
+  boss: EndBossStats | null;
 }
 
 export class Hud {
@@ -102,6 +104,7 @@ export class Hud {
   private readonly airRow: HTMLDivElement;
   private readonly hotbar: HTMLDivElement;
   private readonly questTracker: HTMLDivElement;
+  private readonly bossBar: HTMLDivElement;
   private readonly toast: HTMLDivElement;
 
   private mode: HudMode = "title";
@@ -168,10 +171,13 @@ export class Hud {
     this.questTracker = document.createElement("div");
     this.questTracker.className = "quest-tracker";
 
+    this.bossBar = document.createElement("div");
+    this.bossBar.className = "boss-bar";
+
     this.toast = document.createElement("div");
     this.toast.className = "toast";
 
-    this.hudLayer.append(topBar, this.reticle, mining, this.itemName, statusBars, this.hotbar, this.questTracker, this.toast);
+    this.hudLayer.append(topBar, this.bossBar, this.reticle, mining, this.itemName, statusBars, this.hotbar, this.questTracker, this.toast);
 
     this.menuLayer = document.createElement("div");
     this.menuLayer.className = "menu-layer";
@@ -264,7 +270,29 @@ export class Hud {
     this.renderIconRow(this.hungerRow, "hunger", this.stats.survival.hunger);
     this.renderIconRow(this.airRow, "air", this.stats.survival.air);
     this.renderHotbar();
+    this.renderBossBar();
     this.renderQuestTracker();
+  }
+
+  private renderBossBar(): void {
+    const boss = this.stats?.boss ?? null;
+    if (!boss || this.mode !== "playing") {
+      this.bossBar.hidden = true;
+      this.bossBar.innerHTML = "";
+      return;
+    }
+
+    this.bossBar.hidden = false;
+    this.bossBar.innerHTML = "";
+    const title = document.createElement("div");
+    title.className = "boss-title";
+    title.textContent = `${boss.name} · 수정 ${boss.crystals}개`;
+    const meter = document.createElement("div");
+    meter.className = "boss-meter";
+    const fill = document.createElement("span");
+    fill.style.width = `${Math.max(0, Math.min(100, (boss.health / boss.maxHealth) * 100))}%`;
+    meter.append(fill);
+    this.bossBar.append(title, meter);
   }
 
   private renderQuestTracker(): void {
@@ -1038,6 +1066,10 @@ export class Hud {
       mossy_stone_bricks: ["제작", "요새"],
       bookshelf: ["제작", "요새 도서관"],
       iron_bars: ["제작", "요새 포털 방"],
+      end_stone: ["엔드 중앙 섬"],
+      end_stone_bricks: ["제작", "엔드 스폰 다리", "귀환 포털 주변"],
+      end_crystal: ["엔드 흑요석 기둥"],
+      dragon_egg: ["엔더 드래곤 처치 보상"],
       gold_nugget: ["네더 금 광석", "지옥 요새 상자"],
       nether_quartz: ["네더 석영 광석"]
     };
@@ -1383,10 +1415,11 @@ export class Hud {
     const smelting = stats.smeltingRecipes
       .map((entry) => `${entry.recipe.id}:${entry.smeltable ? 1 : 0}`)
       .join("|");
+    const boss = stats.boss ? `${stats.boss.health}:${stats.boss.crystals}` : "-";
     const quests = `${stats.dimension}|${stats.questState.activeMainQuestId ?? "-"}|${stats.questState.trackedSideQuestIds.join(",")}|${stats.questState.completed.join(",")}|${Object.entries(stats.questState.progress)
       .map(([key, value]) => `${key}:${value}`)
       .join(",")}`;
-    return `${this.mode}|${slots}|${armor}|${offhand}|${cursor}|${crafting}|${result}|${recipes}|${smelting}|${quests}`;
+    return `${this.mode}|${slots}|${armor}|${offhand}|${cursor}|${crafting}|${result}|${recipes}|${smelting}|${boss}|${quests}`;
   }
 
   private numberFromEvent(event: MouseEvent): number | null {

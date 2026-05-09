@@ -21,6 +21,7 @@ import { clamp, hash3 } from "./math";
 import { MobManager } from "./mobs";
 import { Player } from "./player";
 import { applyFluidInteractions } from "./fluids";
+import { buildEndExitPortal, EndBossController } from "./endBoss";
 import { insertEyeAndTryActivate, isInEndPortal } from "./endPortal";
 import { isInPortal, tryIgnitePortal } from "./portal";
 import {
@@ -108,6 +109,7 @@ export class Game {
   private highlight!: THREE.LineSegments;
   private handView!: HandView;
   private mobs = new MobManager();
+  private readonly endBoss = new EndBossController();
   private readonly torchLights: THREE.PointLight[] = [];
   private torchScanTimer = 0;
   private nearbyTorchGlow = 0;
@@ -216,6 +218,7 @@ export class Game {
     this.materials = createVoxelMaterials(maxAnisotropy);
     this.setupEnvironment();
     this.scene.add(this.mobs.group);
+    this.scene.add(this.endBoss.group);
     this.setupHighlight();
     this.scene.add(this.camera);
     this.handView = new HandView(this.camera);
@@ -322,6 +325,7 @@ export class Game {
     this.unlockedRecipes = new Set(save.unlockedRecipes);
     this.lootedChests = new Set(save.lootedChests ?? []);
     this.questState = normalizeQuestState(save.quests);
+    this.syncEndBoss();
     this.portalTimer = 0;
     this.mobs.restore(this.dimensionEntities[this.dimension] ?? save.entities ?? []);
     this.world.ensureChunksAround(this.player.position);
@@ -346,6 +350,7 @@ export class Game {
     this.world = new World(seed, this.materials, worldgenVersion, dimension);
     this.world.setModifiedBlocks(modified);
     this.scene.add(this.world.group);
+    this.syncEndBoss();
   }
 
   private normalizeDimensionModified(save: WorldSaveV2): DimensionBlockMap {
@@ -370,6 +375,13 @@ export class Game {
       nether: save.dimensionPlayers?.nether ?? (save.dimension === "nether" ? save.player : undefined),
       end: save.dimensionPlayers?.end ?? (save.dimension === "end" ? save.player : undefined)
     };
+  }
+
+  private syncEndBoss(): void {
+    if (!this.world) {
+      return;
+    }
+    this.endBoss.setWorld(this.world, this.questState.completed.includes("road_defeat_dragon"));
   }
 
   private async createWorld(name: string, seed: string): Promise<void> {
@@ -720,7 +732,12 @@ export class Game {
     }
 
     for (const explosion of mobEvents.explosions) {
-      this.handleExplosion(explosion.x, explosion.y, explosion.z, explosion.radius, explosion.damage);
+      this.handleExplosion(explosion.x, explosion.y, explosion.z, explosion.radius, explosion.damage, "크리퍼");
+    }
+
+    const bossEvents = this.endBoss.update(delta, this.player.position, this.elapsed);
+    if (bossEvents.damage > 0) {
+      this.damagePlayer(bossEvents.damage, actions.secondaryHeld);
     }
 
     this.handleMining(delta, actions);
@@ -745,7 +762,7 @@ export class Game {
     });
   }
 
-  private handleExplosion(x: number, y: number, z: number, radius: number, maxDamage: number): void {
+  private handleExplosion(x: number, y: number, z: number, radius: number, maxDamage: number, sourceLabel = "폭발"): void {
     const playerDistance = this.player.position.distanceTo(new THREE.Vector3(x, y, z));
     if (playerDistance < radius + 2.2) {
       const exposure = clamp(1 - playerDistance / (radius + 2.2), 0, 1);
@@ -795,8 +812,8 @@ export class Game {
       }
     }
 
-    this.hud.showToast(destroyed > 0 ? `크리퍼 폭발: 블록 ${destroyed}개 파괴` : "크리퍼가 폭발했습니다");
-    if (this.survival.state.alive) {
+    this.hud.showToast(destroyed > 0 ? `${sourceLabel} 폭발: 블록 ${destroyed}개 파괴` : `${sourceLabel}이 폭발했습니다`);
+    if (sourceLabel === "크리퍼" && this.survival.state.alive) {
       this.recordQuestEvent({ type: "discover", target: "creeper_survived" });
     }
     this.queueSave();
@@ -831,6 +848,13 @@ export class Game {
           } else {
             this.hud.showToast(`화살로 ${hit.name} 명중`);
           }
+        } else if (this.selectedHit?.block === BlockType.EndCrystal) {
+          this.destroyEndCrystal(this.selectedHit, "화살로 엔드 수정 파괴");
+        } else {
+          const dragonHit = this.endBoss.hitDragonByRay(this.player.getEyePosition(), this.player.getViewDirection(), 34, 6);
+          if (dragonHit.hit) {
+            this.handleDragonHit(dragonHit, "화살로 엔더 드래곤 명중");
+          }
         }
         this.queueSave();
         return;
@@ -859,6 +883,21 @@ export class Game {
         } else {
           this.hud.showToast(`${hit.name} 공격`);
         }
+        return;
+      }
+
+      const dragonHit = this.endBoss.hitDragonByRay(
+        this.player.getEyePosition(),
+        this.player.getViewDirection(),
+        this.attackRange() + 1.2,
+        damage
+      );
+      if (dragonHit.hit) {
+        this.mining = null;
+        this.attackCooldown = this.attackDelay();
+        this.damageHeldTool();
+        this.survival.addExhaustion(0.08);
+        this.handleDragonHit(dragonHit, "엔더 드래곤 공격");
         return;
       }
     }
@@ -1235,7 +1274,56 @@ export class Game {
     return itemDefinition?.combat?.range ?? 4.4;
   }
 
+  private handleDragonHit(hit: { hit: boolean; killed: boolean }, message: string): void {
+    if (!hit.hit) {
+      return;
+    }
+
+    if (hit.killed) {
+      this.handleDragonDefeated();
+      return;
+    }
+
+    this.hud.showToast(message);
+    this.queueSave();
+  }
+
+  private handleDragonDefeated(): void {
+    if (this.world.dimension !== "end") {
+      return;
+    }
+
+    buildEndExitPortal(this.world);
+    addStack(this.inventory, { item: "dragon_egg", count: 1 });
+    this.recordQuestEvent({ type: "mob_killed", target: "엔더 드래곤" });
+    this.syncEndBoss();
+    this.hud.showQuestToast("엔더 드래곤 처치", "귀환 포털이 열리고 드래곤 알을 얻었습니다", "엔딩 루프 완료");
+    this.unlockRecipesFromInventory();
+    this.queueSave();
+  }
+
+  private destroyEndCrystal(hit: VoxelHit, toast = "엔드 수정 파괴"): void {
+    const result = this.endBoss.destroyCrystalAt(hit.x, hit.y, hit.z);
+    if (!result.destroyed) {
+      return;
+    }
+
+    this.handleExplosion(hit.x + 0.5, hit.y + 0.5, hit.z + 0.5, 4.2, 18, "엔드 수정");
+    this.recordQuestEvent({ type: "block_mined", target: "end_crystal" });
+    if (result.killedDragon) {
+      this.handleDragonDefeated();
+      return;
+    }
+    this.hud.showToast(toast);
+    this.queueSave();
+  }
+
   private breakBlock(hit: VoxelHit): void {
+    if (hit.block === BlockType.EndCrystal) {
+      this.destroyEndCrystal(hit);
+      return;
+    }
+
     const definition = BLOCKS[hit.block];
     const held = selectedStack(this.inventory);
     const itemDefinition = held ? ITEM_DEFINITIONS[held.item] : null;
@@ -1958,11 +2046,8 @@ export class Game {
   private updatePortalTravel(delta: number): void {
     if (isInEndPortal(this.world, this.player.position.x, this.player.position.y, this.player.position.z)) {
       this.portalTimer += delta;
-      if (this.portalTimer >= 1.2 && this.endPortalHintCooldown <= 0) {
-        this.hud.showToast("엔드 차원은 다음 대형 업데이트에서 열립니다");
-        this.recordQuestEvent({ type: "dimension", target: "end" });
-        this.endPortalHintCooldown = 4;
-        this.portalTimer = 0;
+      if (this.portalTimer >= 1.2) {
+        this.travelToDimension(this.dimension === "end" ? "overworld" : "end");
       }
       return;
     }
@@ -2005,15 +2090,19 @@ export class Game {
       const arrival = target === "nether" ? this.ensureArrivalPortal(this.world.findSpawn()) : this.world.findSpawn();
       this.player.position.copy(arrival);
       this.player.yaw = this.world.findScenicYaw(arrival);
-      this.player.pitch = target === "nether" ? -0.02 : -0.08;
+      this.player.pitch = target === "nether" ? -0.02 : target === "end" ? -0.16 : -0.08;
     }
 
     this.world.ensureChunksAround(this.player.position);
     this.mobs.restore(this.dimensionEntities[target] ?? []);
+    this.syncEndBoss();
 
     if (target === "nether") {
       this.recordQuestEvent({ type: "dimension", target: "nether" });
       this.hud.showToast("지옥으로 이동했습니다. 귀환 포털 위치를 기억하세요");
+    } else if (target === "end") {
+      this.recordQuestEvent({ type: "dimension", target: "end" });
+      this.hud.showToast("엔드에 진입했습니다. 수정이 드래곤을 회복시킵니다");
     } else {
       this.hud.showToast("지상으로 돌아왔습니다");
     }
@@ -2061,7 +2150,7 @@ export class Game {
   }
 
   private nudgeOutOfPortal(): void {
-    if (!isInPortal(this.world, this.player.position.x, this.player.position.y, this.player.position.z)) {
+    if (!this.isInsideAnyPortal(this.player.position)) {
       return;
     }
 
@@ -2074,11 +2163,18 @@ export class Game {
 
     for (const offset of offsets) {
       const next = this.player.position.clone().add(offset);
-      if (!isInPortal(this.world, next.x, next.y, next.z)) {
+      if (!this.isInsideAnyPortal(next)) {
         this.player.position.copy(next);
         return;
       }
     }
+  }
+
+  private isInsideAnyPortal(position: THREE.Vector3): boolean {
+    return (
+      isInPortal(this.world, position.x, position.y, position.z) ||
+      isInEndPortal(this.world, position.x, position.y, position.z)
+    );
   }
 
   private queueSave(): void {
@@ -2173,6 +2269,7 @@ export class Game {
       craftingResult: craftingResult ? { ...craftingResult } : null,
       questState: this.questState,
       dimension: this.dimension,
+      boss: this.endBoss.stats,
       smeltingRecipes: SMELTING_RECIPES.map((recipe) => ({
         recipe,
         smeltable: canSmelt(recipe, this.inventory)

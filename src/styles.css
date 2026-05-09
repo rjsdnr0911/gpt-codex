@@ -336,6 +336,47 @@ button {
   color: rgba(234, 243, 240, 0.86);
 }
 
+.boss-bar {
+  position: absolute;
+  top: 18px;
+  left: 50%;
+  width: min(560px, calc(100vw - 32px));
+  transform: translateX(-50%);
+  display: grid;
+  gap: 5px;
+  pointer-events: none;
+  filter: drop-shadow(2px 2px 0 rgba(0, 0, 0, 0.72));
+}
+
+.boss-bar[hidden] {
+  display: none;
+}
+
+.boss-title {
+  color: #f1d7ff;
+  font-weight: 900;
+  font-size: 14px;
+  text-align: center;
+  text-shadow: 2px 2px 0 #000;
+}
+
+.boss-meter {
+  height: 12px;
+  border: 2px solid #080608;
+  background: rgba(16, 8, 18, 0.82);
+  box-shadow:
+    inset 2px 2px 0 rgba(255, 255, 255, 0.1),
+    inset -2px -2px 0 rgba(0, 0, 0, 0.45);
+}
+
+.boss-meter span {
+  display: block;
+  height: 100%;
+  background:
+    linear-gradient(90deg, #7f2fc8, #d86aff),
+    #a947e4;
+}
+
 .quest-tracker {
   position: absolute;
   top: 104px;

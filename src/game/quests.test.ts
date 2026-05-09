@@ -97,5 +97,16 @@ describe("quests", () => {
 
     completed = applyQuestEvent(quests, { type: "portal_ignited", target: "end_portal" }, inventory, "overworld");
     expect(completed.map((quest) => quest.id)).toContain("road_activate_end_portal");
+
+    completed = applyQuestEvent(quests, { type: "dimension", target: "end" }, inventory, "end");
+    expect(completed.map((quest) => quest.id)).toContain("road_enter_end");
+
+    applyQuestEvent(quests, { type: "block_mined", target: "end_crystal" }, inventory, "end");
+    applyQuestEvent(quests, { type: "block_mined", target: "end_crystal" }, inventory, "end");
+    completed = applyQuestEvent(quests, { type: "block_mined", target: "end_crystal" }, inventory, "end");
+    expect(completed.map((quest) => quest.id)).toContain("road_destroy_end_crystals");
+
+    completed = applyQuestEvent(quests, { type: "mob_killed", target: "엔더 드래곤" }, inventory, "end");
+    expect(completed.map((quest) => quest.id)).toContain("road_defeat_dragon");
   });
 });

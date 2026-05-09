@@ -39,6 +39,10 @@ export type ItemId =
   | "bookshelf"
   | "iron_bars"
   | "end_portal_frame"
+  | "end_stone"
+  | "end_stone_bricks"
+  | "end_crystal"
+  | "dragon_egg"
   | "coal"
   | "raw_copper"
   | "raw_iron"
@@ -271,6 +275,16 @@ export const ITEM_DEFINITIONS: Record<ItemId, ItemDefinition> = {
   bookshelf: { id: "bookshelf", name: "책장", maxStack: 64, color: "#8f5c32", placeBlock: BlockType.Bookshelf },
   iron_bars: { id: "iron_bars", name: "철창", maxStack: 64, color: "#b7c0bd", placeBlock: BlockType.IronBars },
   end_portal_frame: { id: "end_portal_frame", name: "엔드 포털 프레임", maxStack: 64, color: "#6d8d68" },
+  end_stone: { id: "end_stone", name: "엔드 스톤", maxStack: 64, color: "#d7d2a2", placeBlock: BlockType.EndStone },
+  end_stone_bricks: {
+    id: "end_stone_bricks",
+    name: "엔드 스톤 벽돌",
+    maxStack: 64,
+    color: "#cfc78d",
+    placeBlock: BlockType.EndStoneBricks
+  },
+  end_crystal: { id: "end_crystal", name: "엔드 수정", maxStack: 64, color: "#f5d7ff" },
+  dragon_egg: { id: "dragon_egg", name: "드래곤 알", maxStack: 1, color: "#17121d" },
   coal: { id: "coal", name: "석탄", maxStack: 64, color: "#2e3130" },
   raw_copper: { id: "raw_copper", name: "구리 원석", maxStack: 64, color: "#c9794a" },
   raw_iron: { id: "raw_iron", name: "철 원석", maxStack: 64, color: "#c2a38d" },
@@ -615,6 +629,14 @@ export function itemFromBlock(block: BlockType): ItemId | null {
     case BlockType.EndPortalFrame:
     case BlockType.EndPortalFrameEye:
       return "end_portal_frame";
+    case BlockType.EndStone:
+      return "end_stone";
+    case BlockType.EndStoneBricks:
+      return "end_stone_bricks";
+    case BlockType.EndCrystal:
+      return "end_crystal";
+    case BlockType.DragonEgg:
+      return "dragon_egg";
     case BlockType.Log:
       return "log";
     case BlockType.Leaves:

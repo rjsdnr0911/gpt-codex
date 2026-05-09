@@ -679,6 +679,14 @@ export class MobManager {
       return;
     }
 
+    if (world.dimension === "end") {
+      const hostileCount = this.mobs.filter((mob) => DEFINITIONS[mob.type].hostile).length;
+      if (hostileCount < 10 && Math.random() < 0.85) {
+        this.trySpawnType(world, playerPosition, "enderman", false);
+      }
+      return;
+    }
+
     const night = dayFactor < 0.34;
     const cave = undergroundFactor > 0.48;
     const animalWeather = dayFactor > 0.55 && undergroundFactor < 0.18;

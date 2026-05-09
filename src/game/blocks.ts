@@ -47,7 +47,12 @@ export const enum BlockType {
   IronBars = 40,
   EndPortalFrame = 41,
   EndPortalFrameEye = 42,
-  EndPortal = 43
+  EndPortal = 43,
+  EndStone = 44,
+  EndStoneBricks = 45,
+  Bedrock = 46,
+  EndCrystal = 47,
+  DragonEgg = 48
 }
 
 export type BlockId =
@@ -94,7 +99,12 @@ export type BlockId =
   | "iron_bars"
   | "end_portal_frame"
   | "end_portal_frame_eye"
-  | "end_portal";
+  | "end_portal"
+  | "end_stone"
+  | "end_stone_bricks"
+  | "bedrock"
+  | "end_crystal"
+  | "dragon_egg";
 
 export const enum TileId {
   GrassTop = 0,
@@ -142,7 +152,12 @@ export const enum TileId {
   IronBars = 42,
   EndPortalFrame = 43,
   EndPortalFrameEye = 44,
-  EndPortal = 45
+  EndPortal = 45,
+  EndStone = 46,
+  EndStoneBricks = 47,
+  Bedrock = 48,
+  EndCrystal = 49,
+  DragonEgg = 50
 }
 
 export type FaceName = "top" | "bottom" | "north" | "south" | "east" | "west";
@@ -804,6 +819,69 @@ export const BLOCKS: Record<BlockType, BlockDefinition> = {
     tiles: allFaces(TileId.EndPortal),
     hardness: 100,
     drops: null
+  },
+  [BlockType.EndStone]: {
+    id: "end_stone",
+    displayName: "엔드 스톤",
+    solid: true,
+    transparent: false,
+    fluid: false,
+    swatch: "#d7d2a2",
+    tiles: allFaces(TileId.EndStone),
+    hardness: 3,
+    drops: "end_stone",
+    preferredTool: "pickaxe",
+    requiredTool: "pickaxe",
+    requiredTier: "wood",
+    placeableItem: "end_stone"
+  },
+  [BlockType.EndStoneBricks]: {
+    id: "end_stone_bricks",
+    displayName: "엔드 스톤 벽돌",
+    solid: true,
+    transparent: false,
+    fluid: false,
+    swatch: "#cfc78d",
+    tiles: allFaces(TileId.EndStoneBricks),
+    hardness: 3,
+    drops: "end_stone_bricks",
+    preferredTool: "pickaxe",
+    requiredTool: "pickaxe",
+    requiredTier: "wood",
+    placeableItem: "end_stone_bricks"
+  },
+  [BlockType.Bedrock]: {
+    id: "bedrock",
+    displayName: "기반암",
+    solid: true,
+    transparent: false,
+    fluid: false,
+    swatch: "#34383a",
+    tiles: allFaces(TileId.Bedrock),
+    hardness: 100,
+    drops: null
+  },
+  [BlockType.EndCrystal]: {
+    id: "end_crystal",
+    displayName: "엔드 수정",
+    solid: false,
+    transparent: true,
+    fluid: false,
+    swatch: "#f5d7ff",
+    tiles: allFaces(TileId.EndCrystal),
+    hardness: 0.1,
+    drops: null
+  },
+  [BlockType.DragonEgg]: {
+    id: "dragon_egg",
+    displayName: "드래곤 알",
+    solid: true,
+    transparent: false,
+    fluid: false,
+    swatch: "#17121d",
+    tiles: allFaces(TileId.DragonEgg),
+    hardness: 3,
+    drops: "dragon_egg"
   }
 };
 

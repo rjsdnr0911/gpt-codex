@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { BlockType } from "./blocks";
+import { BlockType, WORLD_HEIGHT } from "./blocks";
+import { buildEndExitPortal } from "./endBoss";
 import { insertEyeAndTryActivate } from "./endPortal";
 import { tryIgnitePortal } from "./portal";
-import { World } from "./world";
+import { WORLDGEN_VERSION, World } from "./world";
 
 describe("portal system", () => {
   it("fills a complete 4x5 obsidian frame with portal blocks", () => {
@@ -56,5 +57,30 @@ describe("portal system", () => {
     expect(result.activated).toBe(true);
     expect(world.getBlock(centerX, y, centerZ)).toBe(BlockType.EndPortal);
     expect(world.getBlock(centerX + 1, y, centerZ + 1)).toBe(BlockType.EndPortal);
+  });
+
+  it("builds the end exit portal and dragon egg after the boss is defeated", () => {
+    const world = new World("end-exit-test", {} as never, WORLDGEN_VERSION, "end");
+
+    buildEndExitPortal(world);
+
+    let portalBlocks = 0;
+    let dragonEggs = 0;
+    for (let y = 0; y < WORLD_HEIGHT; y += 1) {
+      for (let z = -3; z <= 3; z += 1) {
+        for (let x = -3; x <= 3; x += 1) {
+          const block = world.getBlock(x, y, z);
+          if (block === BlockType.EndPortal) {
+            portalBlocks += 1;
+          }
+          if (block === BlockType.DragonEgg) {
+            dragonEggs += 1;
+          }
+        }
+      }
+    }
+
+    expect(portalBlocks).toBe(9);
+    expect(dragonEggs).toBe(1);
   });
 });

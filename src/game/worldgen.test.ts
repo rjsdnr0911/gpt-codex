@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import * as THREE from "three";
 import { BlockType } from "./blocks";
 import { WORLDGEN_VERSION, World } from "./world";
 
@@ -80,5 +81,23 @@ describe("world generation", () => {
     expect(portalFrames).toBe(12);
     expect(bricks).toBeGreaterThan(250);
     expect(bookshelves).toBeGreaterThan(30);
+  });
+
+  it("generates the end island with obsidian pillars and crystals", () => {
+    const world = new World("end-seed", {} as never, WORLDGEN_VERSION, "end");
+    const spawn = world.findSpawn();
+
+    world.ensureChunksAround(new THREE.Vector3(0, spawn.y, 0), 4);
+
+    expect(world.getBlock(0, 38, -58)).toBe(BlockType.Obsidian);
+    expect(world.getBlock(0, 38, -45)).toBe(BlockType.EndStoneBricks);
+    expect(world.getNaturalBlock(0, world.terrainHeight(0, 0), 0)).toBe(BlockType.EndStone);
+    expect(world.getBlock(0, -1, 0)).toBe(BlockType.Air);
+
+    const crystals = world.endCrystalLocations().filter((position) =>
+      world.getBlock(Math.floor(position.x), Math.floor(position.y), Math.floor(position.z)) === BlockType.EndCrystal
+    );
+
+    expect(crystals.length).toBe(8);
   });
 });

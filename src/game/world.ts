@@ -107,6 +107,14 @@ export interface WorldStats {
   chunks: number;
 }
 
+export interface EndPillarSpec {
+  x: number;
+  z: number;
+  radius: number;
+  topY: number;
+  caged: boolean;
+}
+
 export class World {
   readonly group = new THREE.Group();
   readonly seed: string;
@@ -188,8 +196,31 @@ export class World {
     return new THREE.Vector3(x, 18, z);
   }
 
+  endPillars(): EndPillarSpec[] {
+    return Array.from({ length: 8 }, (_, index) => {
+      const angle = (index / 8) * Math.PI * 2 + 0.28;
+      const distance = 28 + (index % 3) * 5 + Math.floor(hash3(this.seedInt ^ 0xe1d, index, 0, 0) * 4);
+      const radius = 2 + (index % 3 === 0 ? 1 : 0);
+      const topY = 48 + index * 2 + Math.floor(hash3(this.seedInt ^ 0xe2d, index, 0, 0) * 4);
+      return {
+        x: Math.round(Math.cos(angle) * distance),
+        z: Math.round(Math.sin(angle) * distance),
+        radius,
+        topY: Math.min(WORLD_HEIGHT - 6, topY),
+        caged: index === 2 || index === 6
+      };
+    });
+  }
+
+  endCrystalLocations(): THREE.Vector3[] {
+    return this.endPillars().map((pillar) => new THREE.Vector3(pillar.x, pillar.topY + 1, pillar.z));
+  }
+
   getBlock(x: number, y: number, z: number): BlockType {
     if (y < 0) {
+      if (this.dimension === "end") {
+        return BlockType.Air;
+      }
       return this.dimension === "nether" ? BlockType.Basalt : BlockType.Stone;
     }
 
@@ -273,6 +304,10 @@ export class World {
       return this.netherTerrainHeight(x, z);
     }
 
+    if (this.dimension === "end") {
+      return this.endTerrainHeight(x, z);
+    }
+
     const continent = (this.continentalNoise(x * 0.0048, z * 0.0048) + 1) * 0.5;
     const hills = this.hillNoise(x * 0.028, z * 0.028);
     const detail = this.detailNoise(x * 0.092, z * 0.092);
@@ -284,6 +319,10 @@ export class World {
   getNaturalBlock(x: number, y: number, z: number): BlockType {
     if (this.dimension === "nether") {
       return this.getNetherNaturalBlock(x, y, z);
+    }
+
+    if (this.dimension === "end") {
+      return this.getEndNaturalBlock(x, y, z);
     }
 
     const height = this.terrainHeight(x, z);
@@ -391,6 +430,34 @@ export class World {
     return clamp(Math.floor(44 + shelf * 8 + detail * 3), 28, WORLD_HEIGHT - 8);
   }
 
+  private endTerrainHeight(x: number, z: number): number {
+    const radius = Math.hypot(x, z);
+    const edge = clamp(1 - radius / 74, 0, 1);
+    const shelf = this.hillNoise(x * 0.035 + 300, z * 0.035 - 260);
+    const detail = this.detailNoise(x * 0.11 - 80, z * 0.11 + 90);
+    return clamp(Math.floor(28 + edge * 12 + shelf * 2.2 + detail * 1.2), 18, WORLD_HEIGHT - 12);
+  }
+
+  private getEndNaturalBlock(x: number, y: number, z: number): BlockType {
+    const radius = Math.hypot(x, z);
+    const edge = clamp(1 - radius / 76, 0, 1);
+
+    if (edge <= 0) {
+      return BlockType.Air;
+    }
+
+    const top = this.endTerrainHeight(x, z);
+    const undersideNoise = (this.caveRoomNoise(x * 0.025 + 20, y * 0.032, z * 0.025 - 20) + 1) * 0.5;
+    const thickness = Math.floor(8 + edge * 20 + undersideNoise * 4);
+    const bottom = Math.max(3, top - thickness);
+
+    if (y <= top && y >= bottom) {
+      return BlockType.EndStone;
+    }
+
+    return BlockType.Air;
+  }
+
   private getNetherNaturalBlock(x: number, y: number, z: number): BlockType {
     if (y <= 1 || y >= WORLD_HEIGHT - 2) {
       return BlockType.Basalt;
@@ -475,6 +542,10 @@ export class World {
       return this.findNetherSpawn();
     }
 
+    if (this.dimension === "end") {
+      return new THREE.Vector3(0.5, 40, -58.5);
+    }
+
     let best: THREE.Vector3 | null = null;
     let bestScore = -Infinity;
 
@@ -502,6 +573,10 @@ export class World {
   findScenicYaw(position: THREE.Vector3): number {
     if (this.dimension === "nether") {
       return this.findOpenYaw(position);
+    }
+
+    if (this.dimension === "end") {
+      return 0;
     }
 
     let bestYaw = 0;
@@ -675,6 +750,9 @@ class Chunk {
 
   getLocal(x: number, y: number, z: number): BlockType {
     if (y < 0) {
+      if (this.world.dimension === "end") {
+        return BlockType.Air;
+      }
       return this.world.dimension === "nether" ? BlockType.Basalt : BlockType.Stone;
     }
 
@@ -800,6 +878,11 @@ class Chunk {
 
     if (this.world.dimension === "nether") {
       this.placeNetherStructures();
+      return;
+    }
+
+    if (this.world.dimension === "end") {
+      this.placeEndStructures();
       return;
     }
 
@@ -1007,6 +1090,77 @@ class Chunk {
         ? "x"
         : "z";
       this.placeNetherFortressCorridor(orientation);
+    }
+  }
+
+  private placeEndStructures(): void {
+    this.placeEndSpawnPlatform();
+    this.placeEndPillars();
+  }
+
+  private placeEndSpawnPlatform(): void {
+    const y = 39;
+    const centerZ = -58;
+    for (let dz = -2; dz <= 2; dz += 1) {
+      for (let dx = -2; dx <= 2; dx += 1) {
+        this.placeGlobal(dx, y - 1, centerZ + dz, BlockType.Obsidian, true);
+        for (let dy = 0; dy <= 4; dy += 1) {
+          this.placeGlobal(dx, y + dy, centerZ + dz, BlockType.Air, true);
+        }
+      }
+    }
+
+    for (let z = centerZ + 3; z <= -45; z += 1) {
+      for (let dx = -1; dx <= 1; dx += 1) {
+        this.placeGlobal(dx, y - 1, z, BlockType.EndStoneBricks, true);
+        this.placeGlobal(dx, y, z, BlockType.Air, true);
+        this.placeGlobal(dx, y + 1, z, BlockType.Air, true);
+      }
+    }
+  }
+
+  private placeEndPillars(): void {
+    for (const pillar of this.world.endPillars()) {
+      const radiusSq = pillar.radius * pillar.radius;
+      for (let dz = -pillar.radius; dz <= pillar.radius; dz += 1) {
+        for (let dx = -pillar.radius; dx <= pillar.radius; dx += 1) {
+          if (dx * dx + dz * dz > radiusSq + 0.25) {
+            continue;
+          }
+
+          for (let y = 1; y <= pillar.topY; y += 1) {
+            this.placeGlobal(pillar.x + dx, y, pillar.z + dz, BlockType.Obsidian, true);
+          }
+        }
+      }
+
+      this.placeGlobal(pillar.x, pillar.topY, pillar.z, BlockType.Bedrock, true);
+      this.placeGlobal(pillar.x, pillar.topY + 1, pillar.z, BlockType.EndCrystal, true);
+
+      if (pillar.caged) {
+        this.placeEndCrystalCage(pillar.x, pillar.topY + 1, pillar.z);
+      }
+    }
+  }
+
+  private placeEndCrystalCage(x: number, y: number, z: number): void {
+    for (let dz = -2; dz <= 2; dz += 1) {
+      for (let dx = -2; dx <= 2; dx += 1) {
+        const edge = Math.abs(dx) === 2 || Math.abs(dz) === 2;
+        if (!edge) {
+          continue;
+        }
+
+        for (let dy = -1; dy <= 2; dy += 1) {
+          this.placeGlobal(x + dx, y + dy, z + dz, BlockType.IronBars, true);
+        }
+      }
+    }
+
+    for (let dz = -1; dz <= 1; dz += 1) {
+      for (let dx = -1; dx <= 1; dx += 1) {
+        this.placeGlobal(x + dx, y + 3, z + dz, BlockType.IronBars, true);
+      }
     }
   }
 

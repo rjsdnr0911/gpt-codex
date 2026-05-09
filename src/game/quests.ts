@@ -45,6 +45,8 @@ export type QuestId =
   | "road_make_eye"
   | "road_find_stronghold"
   | "road_activate_end_portal"
+  | "road_enter_end"
+  | "road_destroy_end_crystals"
   | "road_defeat_dragon"
   | "side_craft_shield"
   | "side_equip_iron_armor"
@@ -263,9 +265,35 @@ export const QUESTS: QuestDefinition[] = [
     ["road_find_stronghold"],
     objective("portal_ignited", "end_portal", 1, "엔드 포털 활성화"),
     ["eye_of_ender", "end_portal_frame", "diamond_sword"],
-    { unlockHints: ["활성화된 엔드 포털은 다음 업데이트에서 엔드 차원과 드래곤 전투로 이어집니다."] }
+    { unlockHints: ["활성화된 엔드 포털 안에 서 있으면 엔드 차원으로 이동합니다."] }
   ),
-  future("road_defeat_dragon", "이후: 드래곤", "엔드 수정과 드래곤을 상대해 엔딩을 봅니다.", ["road_activate_end_portal"], killed("dragon", 1, "드래곤 처치"), ["bow", "arrow"]),
+  main(
+    "road_enter_end",
+    "엔드 진입",
+    "활성화된 엔드 포털에 들어가 마지막 차원으로 이동하세요.",
+    ["road_activate_end_portal"],
+    objective("dimension", "end", 1, "엔드 진입"),
+    ["eye_of_ender", "end_portal_frame", "end_stone"],
+    { unlockHints: ["엔드에서는 수정이 드래곤을 회복합니다. 기둥 위 수정을 먼저 깨면 전투가 훨씬 쉬워집니다."] }
+  ),
+  main(
+    "road_destroy_end_crystals",
+    "수정 파괴",
+    "흑요석 기둥 위 엔드 수정을 부숴 드래곤의 회복을 끊으세요.",
+    ["road_enter_end"],
+    mined("end_crystal", 3, "엔드 수정 파괴"),
+    ["bow", "arrow", "end_crystal", "obsidian"],
+    { items: [{ item: "arrow", count: 8 }], unlockHints: ["철창으로 둘러싸인 수정은 가까이 올라가거나 철창을 부숴야 맞출 수 있습니다."] }
+  ),
+  main(
+    "road_defeat_dragon",
+    "엔더 드래곤",
+    "수정 회복을 끊고 검과 활로 엔더 드래곤을 처치하세요.",
+    ["road_destroy_end_crystals"],
+    killed("엔더 드래곤", 1, "드래곤 처치"),
+    ["diamond_sword", "bow", "arrow", "dragon_egg"],
+    { xp: 120, unlockHints: ["드래곤을 처치하면 중앙 귀환 포털이 열리고 엔딩 루프가 완료됩니다."] }
+  ),
   side("side_craft_shield", "방패 만들기", "철 주괴와 판자로 방패를 만들어 첫 원거리 공격에 대비하세요.", [], crafted("shield", 1, "방패 제작"), ["shield"]),
   side("side_equip_iron_armor", "철 방어구 장착", "철 방어구 한 부위를 입어 생존성을 올리세요.", ["main_smelt_iron"], objective("armor_equipped", "iron", 1, "철 방어구 장착"), ["iron_ingot"]),
   side("side_craft_bow", "활 만들기", "실과 막대기로 활을 만들면 스켈레톤과 크리퍼를 멀리서 견제할 수 있습니다.", [], crafted("bow", 1, "활 제작"), ["bow", "string"]),
