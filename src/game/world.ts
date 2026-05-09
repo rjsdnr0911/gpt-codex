@@ -180,6 +180,14 @@ export class World {
     };
   }
 
+  strongholdLocation(): THREE.Vector3 {
+    const angle = hash3(this.seedInt ^ 0x57e0, 11, 0, 19) * Math.PI * 2;
+    const radius = 180 + Math.floor(hash3(this.seedInt ^ 0x57e1, 17, 0, 23) * 90);
+    const x = Math.round(Math.cos(angle) * radius / CHUNK_SIZE) * CHUNK_SIZE + 8;
+    const z = Math.round(Math.sin(angle) * radius / CHUNK_SIZE) * CHUNK_SIZE + 8;
+    return new THREE.Vector3(x, 18, z);
+  }
+
   getBlock(x: number, y: number, z: number): BlockType {
     if (y < 0) {
       return this.dimension === "nether" ? BlockType.Basalt : BlockType.Stone;
@@ -817,6 +825,176 @@ class Chunk {
     } else if (undergroundRoll < 0.047) {
       this.placeDungeon(centerX, 8 + Math.floor(hash3(this.world.seedInt ^ 0xd06e, this.cx, 5, this.cz) * 18), centerZ);
     }
+
+    this.placeStronghold();
+  }
+
+  private placeStronghold(): void {
+    const location = this.world.strongholdLocation();
+    const centerX = Math.floor(location.x);
+    const centerY = Math.floor(location.y);
+    const centerZ = Math.floor(location.z);
+    const startX = this.cx * CHUNK_SIZE;
+    const startZ = this.cz * CHUNK_SIZE;
+    const range = 42;
+
+    if (
+      startX > centerX + range ||
+      startX + CHUNK_SIZE < centerX - range ||
+      startZ > centerZ + range ||
+      startZ + CHUNK_SIZE < centerZ - range
+    ) {
+      return;
+    }
+
+    this.placeStrongholdCorridor(centerX, centerY, centerZ, "x", -30, 30);
+    this.placeStrongholdCorridor(centerX, centerY, centerZ, "z", -22, 26);
+    this.placeStrongholdCorridor(centerX + 20, centerY, centerZ, "z", 0, 15);
+    this.placeStrongholdCorridor(centerX - 20, centerY + 1, centerZ, "z", 0, 16);
+    this.placeStrongholdCorridor(centerX - 20, centerY, centerZ, "z", -16, 0);
+    this.placeStrongholdRoom(centerX + 20, centerY, centerZ + 15, -8, 8, -8, 8, 5);
+    this.placeStrongholdRoom(centerX - 20, centerY + 1, centerZ + 16, -8, 8, -7, 7, 6);
+    this.placeStrongholdRoom(centerX - 20, centerY, centerZ - 16, -7, 7, -6, 6, 4);
+    this.placeEndPortalRoom(centerX + 20, centerY, centerZ + 15);
+    this.placeStrongholdLibrary(centerX - 20, centerY + 1, centerZ + 16);
+    this.placeStrongholdArmory(centerX - 20, centerY, centerZ - 16);
+    this.carveStrongholdDoor(centerX + 20, centerY, centerZ + 7, "z");
+    this.carveStrongholdDoor(centerX - 20, centerY + 1, centerZ + 9, "z");
+    this.carveStrongholdDoor(centerX - 20, centerY, centerZ - 10, "z");
+  }
+
+  private placeStrongholdCorridor(
+    centerX: number,
+    centerY: number,
+    centerZ: number,
+    axis: "x" | "z",
+    min: number,
+    max: number
+  ): void {
+    for (let offset = min; offset <= max; offset += 1) {
+      for (let side = -2; side <= 2; side += 1) {
+        for (let dy = -1; dy <= 3; dy += 1) {
+          const x = axis === "x" ? centerX + offset : centerX + side;
+          const z = axis === "x" ? centerZ + side : centerZ + offset;
+          const wall = Math.abs(side) === 2 || dy === -1 || dy === 3;
+          this.placeGlobal(x, centerY + dy, z, wall ? this.strongholdBrickAt(x, centerY + dy, z) : BlockType.Air, true);
+        }
+      }
+
+      if (offset % 9 === 0) {
+        const tx = axis === "x" ? centerX + offset : centerX + 1;
+        const tz = axis === "x" ? centerZ + 1 : centerZ + offset;
+        this.placeGlobal(tx, centerY + 1, tz, BlockType.Torch, true);
+      }
+    }
+  }
+
+  private placeStrongholdRoom(
+    centerX: number,
+    centerY: number,
+    centerZ: number,
+    minX: number,
+    maxX: number,
+    minZ: number,
+    maxZ: number,
+    height: number
+  ): void {
+    for (let dz = minZ; dz <= maxZ; dz += 1) {
+      for (let dx = minX; dx <= maxX; dx += 1) {
+        for (let dy = -1; dy <= height; dy += 1) {
+          const wall = dx === minX || dx === maxX || dz === minZ || dz === maxZ || dy === -1 || dy === height;
+          const x = centerX + dx;
+          const y = centerY + dy;
+          const z = centerZ + dz;
+          this.placeGlobal(x, y, z, wall ? this.strongholdBrickAt(x, y, z) : BlockType.Air, true);
+        }
+      }
+    }
+  }
+
+  private placeEndPortalRoom(centerX: number, centerY: number, centerZ: number): void {
+    for (let dz = -4; dz <= 4; dz += 1) {
+      for (let dx = -4; dx <= 4; dx += 1) {
+        if (Math.abs(dx) === 4 || Math.abs(dz) === 4) {
+          continue;
+        }
+        this.placeGlobal(centerX + dx, centerY, centerZ + dz, BlockType.StoneBricks, true);
+      }
+    }
+
+    for (let dx = -2; dx <= 2; dx += 1) {
+      for (let dz = -2; dz <= 2; dz += 1) {
+        const edge = Math.abs(dx) === 2 || Math.abs(dz) === 2;
+        const corner = Math.abs(dx) === 2 && Math.abs(dz) === 2;
+        if (edge && !corner) {
+          const filled = hash3(this.world.seedInt ^ 0xe9d0, centerX + dx, centerY, centerZ + dz) < 0.12;
+          this.placeGlobal(
+            centerX + dx,
+            centerY + 1,
+            centerZ + dz,
+            filled ? BlockType.EndPortalFrameEye : BlockType.EndPortalFrame,
+            true
+          );
+        } else if (!edge) {
+          this.placeGlobal(centerX + dx, centerY + 1, centerZ + dz, BlockType.Air, true);
+        }
+      }
+    }
+
+    this.placeGlobal(centerX - 5, centerY + 1, centerZ, BlockType.IronBars, true);
+    this.placeGlobal(centerX + 5, centerY + 1, centerZ, BlockType.IronBars, true);
+    this.placeGlobal(centerX - 3, centerY + 1, centerZ - 5, BlockType.Torch, true);
+    this.placeGlobal(centerX + 3, centerY + 1, centerZ - 5, BlockType.Torch, true);
+    this.placeGlobal(centerX, centerY, centerZ + 5, BlockType.Lava, true);
+  }
+
+  private placeStrongholdLibrary(centerX: number, centerY: number, centerZ: number): void {
+    for (let z = -5; z <= 5; z += 5) {
+      for (let x = -5; x <= 5; x += 1) {
+        for (let y = 0; y <= 3; y += 1) {
+          this.placeGlobal(centerX + x, centerY + y, centerZ + z, BlockType.Bookshelf, true);
+        }
+      }
+    }
+
+    for (let x = -5; x <= 5; x += 5) {
+      for (let z = -4; z <= 4; z += 1) {
+        this.placeGlobal(centerX + x, centerY, centerZ + z, BlockType.Planks, true);
+        this.placeGlobal(centerX + x, centerY + 1, centerZ + z, BlockType.Bookshelf, true);
+      }
+    }
+
+    this.placeGlobal(centerX, centerY, centerZ, BlockType.Chest, true);
+    this.placeGlobal(centerX, centerY + 2, centerZ - 6, BlockType.Torch, true);
+  }
+
+  private placeStrongholdArmory(centerX: number, centerY: number, centerZ: number): void {
+    this.placeGlobal(centerX - 3, centerY, centerZ - 2, BlockType.Chest, true);
+    this.placeGlobal(centerX + 3, centerY, centerZ + 2, BlockType.IronBars, true);
+    this.placeGlobal(centerX + 2, centerY, centerZ - 2, BlockType.IronBars, true);
+    this.placeGlobal(centerX - 2, centerY, centerZ + 2, BlockType.Torch, true);
+    this.placeGlobal(centerX, centerY, centerZ + 4, BlockType.StoneBricks, true);
+  }
+
+  private carveStrongholdDoor(centerX: number, centerY: number, centerZ: number, axis: "x" | "z"): void {
+    for (let side = -1; side <= 1; side += 1) {
+      for (let dy = 0; dy <= 2; dy += 1) {
+        const x = axis === "x" ? centerX : centerX + side;
+        const z = axis === "x" ? centerZ + side : centerZ;
+        this.placeGlobal(x, centerY + dy, z, BlockType.Air, true);
+      }
+    }
+  }
+
+  private strongholdBrickAt(x: number, y: number, z: number): BlockType {
+    const roll = hash3(this.world.seedInt ^ 0x570a, x, y, z);
+    if (roll < 0.13) {
+      return BlockType.CrackedStoneBricks;
+    }
+    if (roll < 0.28) {
+      return BlockType.MossyStoneBricks;
+    }
+    return BlockType.StoneBricks;
   }
 
   private placeNetherStructures(): void {

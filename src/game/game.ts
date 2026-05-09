@@ -21,6 +21,7 @@ import { clamp, hash3 } from "./math";
 import { MobManager } from "./mobs";
 import { Player } from "./player";
 import { applyFluidInteractions } from "./fluids";
+import { insertEyeAndTryActivate, isInEndPortal } from "./endPortal";
 import { isInPortal, tryIgnitePortal } from "./portal";
 import {
   canCraft,
@@ -70,6 +71,15 @@ interface MiningState {
   key: string;
   progress: number;
   block: BlockType;
+}
+
+interface EyeMarker {
+  group: THREE.Group;
+  start: THREE.Vector3;
+  end: THREE.Vector3;
+  age: number;
+  duration: number;
+  broken: boolean;
 }
 
 type DimensionBlockMap = Partial<Record<DimensionId, SavedBlock[]>>;
@@ -126,6 +136,8 @@ export class Game {
   private dimensionEntities: DimensionEntityMap = {};
   private dimensionPlayers: DimensionPlayerMap = {};
   private portalTimer = 0;
+  private readonly eyeMarkers: EyeMarker[] = [];
+  private endPortalHintCooldown = 0;
   private mining: MiningState | null = null;
   private selectedItemTimer = 0;
   private attackCooldown = 0;
@@ -576,6 +588,7 @@ export class Game {
     this.fps = this.fps * 0.92 + (1 / Math.max(delta, 0.001)) * 0.08;
     this.selectedItemTimer = Math.max(0, this.selectedItemTimer - delta);
     this.attackCooldown = Math.max(0, this.attackCooldown - delta);
+    this.endPortalHintCooldown = Math.max(0, this.endPortalHintCooldown - delta);
 
     this.handleKeyboard();
 
@@ -588,6 +601,7 @@ export class Game {
     }
 
     this.updateEnvironment(delta);
+    this.updateEyeMarkers(delta);
     this.handView.update(
       delta,
       selectedStack(this.inventory),
@@ -676,6 +690,15 @@ export class Game {
       this.recordQuestEvent({ type: "discover", target: "ruined_portal" });
     } else if (this.selectedHit?.block === BlockType.NetherBrick) {
       this.recordQuestEvent({ type: "discover", target: "fortress" });
+    } else if (
+      this.selectedHit?.block === BlockType.StoneBricks ||
+      this.selectedHit?.block === BlockType.CrackedStoneBricks ||
+      this.selectedHit?.block === BlockType.MossyStoneBricks ||
+      this.selectedHit?.block === BlockType.Bookshelf ||
+      this.selectedHit?.block === BlockType.EndPortalFrame ||
+      this.selectedHit?.block === BlockType.EndPortalFrameEye
+    ) {
+      this.recordQuestEvent({ type: "discover", target: "stronghold" });
     }
     this.updateHighlight();
 
@@ -743,7 +766,13 @@ export class Game {
           }
 
           const block = this.world.getBlock(bx, by, bz);
-          if (block === BlockType.Air || block === BlockType.Water || block === BlockType.Lava || block === BlockType.NetherPortal) {
+          if (
+            block === BlockType.Air ||
+            block === BlockType.Water ||
+            block === BlockType.Lava ||
+            block === BlockType.NetherPortal ||
+            block === BlockType.EndPortal
+          ) {
             continue;
           }
 
@@ -901,6 +930,20 @@ export class Game {
       return;
     }
 
+    if (held?.item === "eye_of_ender") {
+      if (this.selectedHit?.block === BlockType.EndPortalFrame && this.handleEndPortalFrameUse()) {
+        return;
+      }
+
+      if (this.selectedHit?.block === BlockType.EndPortalFrameEye) {
+        this.hud.showToast("이미 엔더의 눈이 꽂혀 있습니다");
+        return;
+      }
+
+      this.handleEyeOfEnderUse();
+      return;
+    }
+
     if (!this.selectedHit || !held) {
       return;
     }
@@ -936,6 +979,137 @@ export class Game {
         this.queueSave();
       }
     }
+  }
+
+  private handleEndPortalFrameUse(): boolean {
+    if (!this.selectedHit) {
+      return false;
+    }
+
+    const result = insertEyeAndTryActivate(this.world, this.selectedHit.x, this.selectedHit.y, this.selectedHit.z);
+    if (!result.inserted) {
+      return false;
+    }
+
+    this.consumeSelected(1);
+    this.recordQuestEvent({ type: "block_placed", target: "end_portal_frame_eye" });
+    this.recordQuestEvent({ type: "discover", target: "stronghold" });
+
+    if (result.activated) {
+      this.recordQuestEvent({ type: "portal_ignited", target: "end_portal" });
+      this.hud.showToast("엔드 포털이 활성화되었습니다");
+    } else {
+      this.hud.showToast("프레임에 엔더의 눈을 꽂았습니다");
+    }
+
+    this.queueSave();
+    return true;
+  }
+
+  private handleEyeOfEnderUse(): boolean {
+    if (this.dimension !== "overworld") {
+      this.hud.showToast("엔더의 눈은 지상에서 요새를 찾을 때 가장 잘 반응합니다");
+      return true;
+    }
+
+    const target = this.world.strongholdLocation();
+    const from = this.player.getEyePosition();
+    const horizontal = new THREE.Vector3(target.x - this.player.position.x, 0, target.z - this.player.position.z);
+    const distance = horizontal.length();
+
+    if (distance < 0.001) {
+      horizontal.set(0, 0, 1);
+    } else {
+      horizontal.normalize();
+    }
+
+    const travel = Math.min(12, Math.max(4, distance));
+    const start = from.clone().add(horizontal.clone().multiplyScalar(0.7));
+    const end = start.clone().add(horizontal.clone().multiplyScalar(travel));
+    end.y += distance < 24 ? 0.2 : 2.2;
+
+    const broken = Math.random() < 0.2;
+    this.addEyeMarker(start, end, broken);
+    this.recordQuestEvent({ type: "discover", target: "stronghold_signal" });
+
+    if (distance < 24) {
+      this.recordQuestEvent({ type: "discover", target: "stronghold" });
+    }
+
+    if (broken) {
+      this.consumeSelected(1);
+      this.queueSave();
+    }
+
+    const direction = this.directionLabel(horizontal.x, horizontal.z);
+    const message =
+      distance < 24
+        ? "엔더의 눈이 발밑으로 떨어집니다. 요새가 아주 가깝습니다"
+        : `엔더의 눈이 ${direction}쪽으로 날아갑니다 · 약 ${Math.round(distance)}m`;
+    this.hud.showToast(broken ? `${message} · 깨졌습니다` : message);
+    return true;
+  }
+
+  private addEyeMarker(start: THREE.Vector3, end: THREE.Vector3, broken: boolean): void {
+    const group = new THREE.Group();
+    const coreMaterial = new THREE.MeshBasicMaterial({ color: "#80e2a6" });
+    const pupilMaterial = new THREE.MeshBasicMaterial({ color: "#163d33" });
+    const glowMaterial = new THREE.MeshBasicMaterial({ color: broken ? "#ffe08a" : "#dfffe8", transparent: true, opacity: 0.68 });
+    const core = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.2, 0.28), coreMaterial);
+    const pupil = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.08, 0.11), pupilMaterial);
+    const glow = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.04, 0.42), glowMaterial);
+    pupil.position.set(0, 0.03, -0.1);
+    glow.position.y = -0.13;
+    group.add(core, pupil, glow);
+    group.position.copy(start);
+    this.scene.add(group);
+
+    this.eyeMarkers.push({ group, start, end, age: 0, duration: 1.65, broken });
+  }
+
+  private updateEyeMarkers(delta: number): void {
+    for (let index = this.eyeMarkers.length - 1; index >= 0; index -= 1) {
+      const marker = this.eyeMarkers[index];
+      marker.age += delta;
+      const t = clamp(marker.age / marker.duration, 0, 1);
+      const eased = 1 - (1 - t) * (1 - t);
+      const position = marker.start.clone().lerp(marker.end, eased);
+      position.y += Math.sin(t * Math.PI) * 1.05;
+      marker.group.position.copy(position);
+      marker.group.rotation.y += delta * 5.4;
+      marker.group.rotation.x = Math.sin(marker.age * 8) * 0.2;
+      marker.group.scale.setScalar(marker.broken && t > 0.75 ? 1 + (t - 0.75) * 1.8 : 1);
+
+      if (marker.age < marker.duration) {
+        continue;
+      }
+
+      this.scene.remove(marker.group);
+      this.disposeGroup(marker.group);
+      this.eyeMarkers.splice(index, 1);
+    }
+  }
+
+  private disposeGroup(group: THREE.Group): void {
+    group.traverse((object) => {
+      const mesh = object as THREE.Mesh;
+      if (mesh.geometry) {
+        mesh.geometry.dispose();
+      }
+
+      const material = mesh.material;
+      if (Array.isArray(material)) {
+        material.forEach((entry) => entry.dispose());
+      } else if (material) {
+        material.dispose();
+      }
+    });
+  }
+
+  private directionLabel(x: number, z: number): string {
+    const northSouth = z < -0.35 ? "북" : z > 0.35 ? "남" : "";
+    const eastWest = x > 0.35 ? "동" : x < -0.35 ? "서" : "";
+    return `${northSouth}${eastWest}` || "가까운";
   }
 
   private handleBucketUse(held: ItemStack): boolean {
@@ -1167,6 +1341,18 @@ export class Game {
       }
       if (roll(0xe0d3) > 0.78) {
         loot.push({ item: "ender_pearl", count: 1 });
+      }
+    }
+
+    const stronghold = this.world.strongholdLocation();
+    if (this.dimension === "overworld" && hit.y < 36 && Math.hypot(hit.x - stronghold.x, hit.z - stronghold.z) < 70) {
+      loot.push({ item: "paper", count: 2 + Math.floor(roll(0x5a7e) * 4) });
+      loot.push({ item: "book", count: 1 + Math.floor(roll(0xb007) * 2) });
+      if (roll(0xe9e) > 0.55) {
+        loot.push({ item: "ender_pearl", count: 1 });
+      }
+      if (roll(0xe9f) > 0.78) {
+        loot.push({ item: "eye_of_ender", count: 1 });
       }
     }
 
@@ -1770,6 +1956,17 @@ export class Game {
   }
 
   private updatePortalTravel(delta: number): void {
+    if (isInEndPortal(this.world, this.player.position.x, this.player.position.y, this.player.position.z)) {
+      this.portalTimer += delta;
+      if (this.portalTimer >= 1.2 && this.endPortalHintCooldown <= 0) {
+        this.hud.showToast("엔드 차원은 다음 대형 업데이트에서 열립니다");
+        this.recordQuestEvent({ type: "dimension", target: "end" });
+        this.endPortalHintCooldown = 4;
+        this.portalTimer = 0;
+      }
+      return;
+    }
+
     if (!isInPortal(this.world, this.player.position.x, this.player.position.y, this.player.position.z)) {
       this.portalTimer = 0;
       return;

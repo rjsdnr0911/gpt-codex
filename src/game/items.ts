@@ -33,6 +33,12 @@ export type ItemId =
   | "emerald_ore"
   | "quartz_ore"
   | "nether_gold_ore"
+  | "stone_bricks"
+  | "cracked_stone_bricks"
+  | "mossy_stone_bricks"
+  | "bookshelf"
+  | "iron_bars"
+  | "end_portal_frame"
   | "coal"
   | "raw_copper"
   | "raw_iron"
@@ -58,6 +64,8 @@ export type ItemId =
   | "blaze_powder"
   | "ender_pearl"
   | "eye_of_ender"
+  | "paper"
+  | "book"
   | "wooden_pickaxe"
   | "stone_pickaxe"
   | "iron_pickaxe"
@@ -239,6 +247,30 @@ export const ITEM_DEFINITIONS: Record<ItemId, ItemDefinition> = {
     color: "#ad5b35",
     placeBlock: BlockType.NetherGoldOre
   },
+  stone_bricks: {
+    id: "stone_bricks",
+    name: "석재 벽돌",
+    maxStack: 64,
+    color: "#747b78",
+    placeBlock: BlockType.StoneBricks
+  },
+  cracked_stone_bricks: {
+    id: "cracked_stone_bricks",
+    name: "금 간 석재 벽돌",
+    maxStack: 64,
+    color: "#666d6a",
+    placeBlock: BlockType.CrackedStoneBricks
+  },
+  mossy_stone_bricks: {
+    id: "mossy_stone_bricks",
+    name: "이끼 낀 석재 벽돌",
+    maxStack: 64,
+    color: "#6f8068",
+    placeBlock: BlockType.MossyStoneBricks
+  },
+  bookshelf: { id: "bookshelf", name: "책장", maxStack: 64, color: "#8f5c32", placeBlock: BlockType.Bookshelf },
+  iron_bars: { id: "iron_bars", name: "철창", maxStack: 64, color: "#b7c0bd", placeBlock: BlockType.IronBars },
+  end_portal_frame: { id: "end_portal_frame", name: "엔드 포털 프레임", maxStack: 64, color: "#6d8d68" },
   coal: { id: "coal", name: "석탄", maxStack: 64, color: "#2e3130" },
   raw_copper: { id: "raw_copper", name: "구리 원석", maxStack: 64, color: "#c9794a" },
   raw_iron: { id: "raw_iron", name: "철 원석", maxStack: 64, color: "#c2a38d" },
@@ -270,6 +302,8 @@ export const ITEM_DEFINITIONS: Record<ItemId, ItemDefinition> = {
   blaze_powder: { id: "blaze_powder", name: "블레이즈 가루", maxStack: 64, color: "#f4c35a" },
   ender_pearl: { id: "ender_pearl", name: "엔더 진주", maxStack: 16, color: "#1f8c7d" },
   eye_of_ender: { id: "eye_of_ender", name: "엔더의 눈", maxStack: 64, color: "#79d6a8" },
+  paper: { id: "paper", name: "종이", maxStack: 64, color: "#eee8cf" },
+  book: { id: "book", name: "책", maxStack: 64, color: "#7b4a30" },
 
   wooden_pickaxe: {
     id: "wooden_pickaxe",
@@ -568,6 +602,19 @@ export function itemFromBlock(block: BlockType): ItemId | null {
       return "quartz_ore";
     case BlockType.NetherGoldOre:
       return "nether_gold_ore";
+    case BlockType.StoneBricks:
+      return "stone_bricks";
+    case BlockType.CrackedStoneBricks:
+      return "cracked_stone_bricks";
+    case BlockType.MossyStoneBricks:
+      return "mossy_stone_bricks";
+    case BlockType.Bookshelf:
+      return "bookshelf";
+    case BlockType.IronBars:
+      return "iron_bars";
+    case BlockType.EndPortalFrame:
+    case BlockType.EndPortalFrameEye:
+      return "end_portal_frame";
     case BlockType.Log:
       return "log";
     case BlockType.Leaves:

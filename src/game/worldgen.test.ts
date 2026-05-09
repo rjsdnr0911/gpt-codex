@@ -41,4 +41,44 @@ describe("world generation", () => {
     expect(counts.get(BlockType.Air) ?? 0).toBeGreaterThan(100);
     expect((counts.get(BlockType.QuartzOre) ?? 0) + (counts.get(BlockType.NetherGoldOre) ?? 0)).toBeGreaterThan(5);
   });
+
+  it("places a deterministic stronghold with an end portal room", () => {
+    const world = new World("stronghold-seed", {} as never, WORLDGEN_VERSION);
+    const location = world.strongholdLocation();
+    const secondWorld = new World("stronghold-seed", {} as never, WORLDGEN_VERSION);
+
+    expect(secondWorld.strongholdLocation().x).toBe(location.x);
+    expect(secondWorld.strongholdLocation().z).toBe(location.z);
+
+    world.ensureChunksAround(location, 3);
+
+    let portalFrames = 0;
+    let bricks = 0;
+    let bookshelves = 0;
+
+    for (let z = Math.floor(location.z) - 28; z <= Math.floor(location.z) + 32; z += 1) {
+      for (let x = Math.floor(location.x) - 34; x <= Math.floor(location.x) + 34; x += 1) {
+        for (let y = 12; y <= 26; y += 1) {
+          const block = world.getBlock(x, y, z);
+          if (block === BlockType.EndPortalFrame || block === BlockType.EndPortalFrameEye) {
+            portalFrames += 1;
+          }
+          if (
+            block === BlockType.StoneBricks ||
+            block === BlockType.CrackedStoneBricks ||
+            block === BlockType.MossyStoneBricks
+          ) {
+            bricks += 1;
+          }
+          if (block === BlockType.Bookshelf) {
+            bookshelves += 1;
+          }
+        }
+      }
+    }
+
+    expect(portalFrames).toBe(12);
+    expect(bricks).toBeGreaterThan(250);
+    expect(bookshelves).toBeGreaterThan(30);
+  });
 });

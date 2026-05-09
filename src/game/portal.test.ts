@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { BlockType } from "./blocks";
+import { insertEyeAndTryActivate } from "./endPortal";
 import { tryIgnitePortal } from "./portal";
 import { World } from "./world";
 
@@ -30,5 +31,30 @@ describe("portal system", () => {
     expect(result.success).toBe(true);
     expect(world.getBlock(baseX, baseY, z)).toBe(BlockType.NetherPortal);
     expect(world.getBlock(baseX + 1, baseY + 2, z)).toBe(BlockType.NetherPortal);
+  });
+
+  it("activates a 12-frame end portal ring after the final eye is inserted", () => {
+    const world = new World("end-portal-test", {} as never);
+    const centerX = 4;
+    const y = 12;
+    const centerZ = -2;
+
+    for (let dz = -2; dz <= 2; dz += 1) {
+      for (let dx = -2; dx <= 2; dx += 1) {
+        const edge = Math.abs(dx) === 2 || Math.abs(dz) === 2;
+        const corner = Math.abs(dx) === 2 && Math.abs(dz) === 2;
+        if (edge && !corner) {
+          world.setBlock(centerX + dx, y, centerZ + dz, BlockType.EndPortalFrameEye);
+        }
+      }
+    }
+
+    world.setBlock(centerX, y, centerZ - 2, BlockType.EndPortalFrame);
+    const result = insertEyeAndTryActivate(world, centerX, y, centerZ - 2);
+
+    expect(result.inserted).toBe(true);
+    expect(result.activated).toBe(true);
+    expect(world.getBlock(centerX, y, centerZ)).toBe(BlockType.EndPortal);
+    expect(world.getBlock(centerX + 1, y, centerZ + 1)).toBe(BlockType.EndPortal);
   });
 });

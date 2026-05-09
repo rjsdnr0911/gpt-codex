@@ -1028,8 +1028,16 @@ export class Hud {
       flint_and_steel: ["제작"],
       blaze_rod: ["블레이즈"],
       blaze_powder: ["블레이즈 막대 제작", "지옥 요새 상자"],
-      ender_pearl: ["엔더맨", "지옥 요새 상자"],
-      eye_of_ender: ["제작"],
+      ender_pearl: ["엔더맨", "지옥 요새 상자", "요새 상자"],
+      eye_of_ender: ["제작", "요새 상자"],
+      paper: ["제작", "요새 상자"],
+      book: ["책장", "제작", "요새 상자"],
+      end_portal_frame: ["요새 포털 방"],
+      stone_bricks: ["제작", "요새"],
+      cracked_stone_bricks: ["요새"],
+      mossy_stone_bricks: ["제작", "요새"],
+      bookshelf: ["제작", "요새 도서관"],
+      iron_bars: ["제작", "요새 포털 방"],
       gold_nugget: ["네더 금 광석", "지옥 요새 상자"],
       nether_quartz: ["네더 석영 광석"]
     };

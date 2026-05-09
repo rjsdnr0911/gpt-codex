@@ -39,7 +39,15 @@ export const enum BlockType {
   SoulSand = 32,
   Basalt = 33,
   QuartzOre = 34,
-  NetherGoldOre = 35
+  NetherGoldOre = 35,
+  StoneBricks = 36,
+  CrackedStoneBricks = 37,
+  MossyStoneBricks = 38,
+  Bookshelf = 39,
+  IronBars = 40,
+  EndPortalFrame = 41,
+  EndPortalFrameEye = 42,
+  EndPortal = 43
 }
 
 export type BlockId =
@@ -78,7 +86,15 @@ export type BlockId =
   | "soul_sand"
   | "basalt"
   | "quartz_ore"
-  | "nether_gold_ore";
+  | "nether_gold_ore"
+  | "stone_bricks"
+  | "cracked_stone_bricks"
+  | "mossy_stone_bricks"
+  | "bookshelf"
+  | "iron_bars"
+  | "end_portal_frame"
+  | "end_portal_frame_eye"
+  | "end_portal";
 
 export const enum TileId {
   GrassTop = 0,
@@ -118,7 +134,15 @@ export const enum TileId {
   SoulSand = 34,
   Basalt = 35,
   QuartzOre = 36,
-  NetherGoldOre = 37
+  NetherGoldOre = 37,
+  StoneBricks = 38,
+  CrackedStoneBricks = 39,
+  MossyStoneBricks = 40,
+  Bookshelf = 41,
+  IronBars = 42,
+  EndPortalFrame = 43,
+  EndPortalFrameEye = 44,
+  EndPortal = 45
 }
 
 export type FaceName = "top" | "bottom" | "north" | "south" | "east" | "west";
@@ -670,6 +694,116 @@ export const BLOCKS: Record<BlockType, BlockDefinition> = {
     requiredTool: "pickaxe",
     requiredTier: "wood",
     placeableItem: "nether_gold_ore"
+  },
+  [BlockType.StoneBricks]: {
+    id: "stone_bricks",
+    displayName: "석재 벽돌",
+    solid: true,
+    transparent: false,
+    fluid: false,
+    swatch: "#747b78",
+    tiles: allFaces(TileId.StoneBricks),
+    hardness: 1.5,
+    drops: "stone_bricks",
+    preferredTool: "pickaxe",
+    requiredTool: "pickaxe",
+    requiredTier: "wood",
+    placeableItem: "stone_bricks"
+  },
+  [BlockType.CrackedStoneBricks]: {
+    id: "cracked_stone_bricks",
+    displayName: "금 간 석재 벽돌",
+    solid: true,
+    transparent: false,
+    fluid: false,
+    swatch: "#666d6a",
+    tiles: allFaces(TileId.CrackedStoneBricks),
+    hardness: 1.5,
+    drops: "cracked_stone_bricks",
+    preferredTool: "pickaxe",
+    requiredTool: "pickaxe",
+    requiredTier: "wood",
+    placeableItem: "cracked_stone_bricks"
+  },
+  [BlockType.MossyStoneBricks]: {
+    id: "mossy_stone_bricks",
+    displayName: "이끼 낀 석재 벽돌",
+    solid: true,
+    transparent: false,
+    fluid: false,
+    swatch: "#6f8068",
+    tiles: allFaces(TileId.MossyStoneBricks),
+    hardness: 1.5,
+    drops: "mossy_stone_bricks",
+    preferredTool: "pickaxe",
+    requiredTool: "pickaxe",
+    requiredTier: "wood",
+    placeableItem: "mossy_stone_bricks"
+  },
+  [BlockType.Bookshelf]: {
+    id: "bookshelf",
+    displayName: "책장",
+    solid: true,
+    transparent: false,
+    fluid: false,
+    swatch: "#8f5c32",
+    tiles: allFaces(TileId.Bookshelf),
+    hardness: 1.5,
+    drops: "book",
+    preferredTool: "axe",
+    placeableItem: "bookshelf"
+  },
+  [BlockType.IronBars]: {
+    id: "iron_bars",
+    displayName: "철창",
+    solid: true,
+    transparent: true,
+    fluid: false,
+    swatch: "#b7c0bd",
+    tiles: allFaces(TileId.IronBars),
+    hardness: 5,
+    drops: "iron_bars",
+    preferredTool: "pickaxe",
+    requiredTool: "pickaxe",
+    requiredTier: "wood",
+    placeableItem: "iron_bars"
+  },
+  [BlockType.EndPortalFrame]: {
+    id: "end_portal_frame",
+    displayName: "엔드 포털 프레임",
+    solid: true,
+    transparent: false,
+    fluid: false,
+    swatch: "#6d8d68",
+    tiles: allFaces(TileId.EndPortalFrame),
+    hardness: 100,
+    drops: null,
+    requiredTool: "pickaxe",
+    requiredTier: "diamond"
+  },
+  [BlockType.EndPortalFrameEye]: {
+    id: "end_portal_frame_eye",
+    displayName: "눈이 꽂힌 엔드 포털 프레임",
+    solid: true,
+    transparent: false,
+    fluid: false,
+    swatch: "#83c98b",
+    tiles: allFaces(TileId.EndPortalFrameEye),
+    hardness: 100,
+    drops: null,
+    requiredTool: "pickaxe",
+    requiredTier: "diamond"
+  },
+  [BlockType.EndPortal]: {
+    id: "end_portal",
+    displayName: "엔드 포털",
+    solid: false,
+    transparent: true,
+    fluid: false,
+    swatch: "#07100f",
+    tiles: allFaces(TileId.EndPortal),
+    hardness: 100,
+    drops: null
   }
 };
 

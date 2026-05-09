@@ -182,6 +182,70 @@ const BASE_RECIPES: Recipe[] = [
     unlocksBy: ["ore"]
   },
   {
+    id: "stone_bricks",
+    name: "석재 벽돌",
+    size: 2,
+    type: "shaped",
+    pattern: ["SS", "SS"],
+    key: { S: "stone" },
+    result: { item: "stone_bricks", count: 4 },
+    category: "building",
+    unlocksBy: ["stone"]
+  },
+  {
+    id: "mossy_stone_bricks",
+    name: "이끼 낀 석재 벽돌",
+    size: 2,
+    type: "shapeless",
+    ingredients: { stone_bricks: 1, leaves: 1 },
+    result: { item: "mossy_stone_bricks", count: 1 },
+    category: "building",
+    unlocksBy: ["stone_bricks", "leaves"]
+  },
+  {
+    id: "iron_bars",
+    name: "철창",
+    size: 3,
+    type: "shaped",
+    pattern: ["III", "III"],
+    key: { I: "iron_ingot" },
+    result: { item: "iron_bars", count: 16 },
+    category: "building",
+    unlocksBy: ["iron_ingot"]
+  },
+  {
+    id: "paper",
+    name: "종이",
+    size: 3,
+    type: "shaped",
+    pattern: ["PPP"],
+    key: { P: "planks" },
+    result: { item: "paper", count: 3 },
+    category: "items",
+    unlocksBy: ["planks"]
+  },
+  {
+    id: "book",
+    name: "책",
+    size: 2,
+    type: "shapeless",
+    ingredients: { paper: 3, leather: 1 },
+    result: { item: "book", count: 1 },
+    category: "items",
+    unlocksBy: ["paper", "leather"]
+  },
+  {
+    id: "bookshelf",
+    name: "책장",
+    size: 3,
+    type: "shaped",
+    pattern: ["PPP", "BBB", "PPP"],
+    key: { P: "planks", B: "book" },
+    result: { item: "bookshelf", count: 1 },
+    category: "building",
+    unlocksBy: ["book", "planks"]
+  },
+  {
     id: "bread",
     name: "빵",
     size: 3,

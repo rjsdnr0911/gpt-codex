@@ -91,5 +91,11 @@ describe("quests", () => {
     addStack(inventory, { item: "eye_of_ender", count: 1 });
     completed = applyQuestEvent(quests, { type: "crafted", target: "eye_of_ender" }, inventory, "nether");
     expect(completed.map((quest) => quest.id)).toContain("road_make_eye");
+
+    completed = applyQuestEvent(quests, { type: "discover", target: "stronghold" }, inventory, "overworld");
+    expect(completed.map((quest) => quest.id)).toContain("road_find_stronghold");
+
+    completed = applyQuestEvent(quests, { type: "portal_ignited", target: "end_portal" }, inventory, "overworld");
+    expect(completed.map((quest) => quest.id)).toContain("road_activate_end_portal");
   });
 });

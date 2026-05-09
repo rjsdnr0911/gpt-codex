@@ -3,7 +3,7 @@ import { TileId } from "./blocks";
 
 const TILE_SIZE = 32;
 const COLUMNS = 6;
-const ROWS = 7;
+const ROWS = 8;
 const ATLAS_WIDTH = COLUMNS * TILE_SIZE;
 const ATLAS_HEIGHT = ROWS * TILE_SIZE;
 
@@ -366,6 +366,108 @@ function drawNetherBrick(ctx: CanvasRenderingContext2D): void {
   }
 }
 
+function drawStoneBrickVariant(ctx: CanvasRenderingContext2D, tile: TileId, moss = false, cracked = false): void {
+  drawDitheredTile(ctx, tile, moss ? { r: 104, g: 120, b: 98 } : { r: 116, g: 124, b: 121 }, 26, 2);
+  const [ox, oy] = tileOrigin(tile);
+  ctx.fillStyle = "rgba(34, 40, 39, 0.42)";
+
+  for (let y = 7; y < TILE_SIZE; y += 8) {
+    ctx.fillRect(ox, oy + y, TILE_SIZE, 2);
+  }
+
+  for (let row = 0; row < 4; row += 1) {
+    const offset = row % 2 === 0 ? 0 : 10;
+    for (let x = offset; x < TILE_SIZE; x += 16) {
+      ctx.fillRect(ox + x, oy + row * 8, 2, 8);
+    }
+  }
+
+  if (moss) {
+    ctx.fillStyle = "rgba(57, 113, 56, 0.52)";
+    for (let index = 0; index < 9; index += 1) {
+      const x = Math.floor(pseudoNoise(tile, index, 17) * 28) + 1;
+      const y = Math.floor(pseudoNoise(tile, index, 23) * 28) + 1;
+      ctx.fillRect(ox + x, oy + y, 3 + (index % 3), 5);
+    }
+  }
+
+  if (cracked) {
+    drawStoneCracks(ctx, tile);
+    ctx.strokeStyle = "rgba(12, 15, 15, 0.58)";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(ox + 9, oy + 3);
+    ctx.lineTo(ox + 15, oy + 12);
+    ctx.lineTo(ox + 12, oy + 19);
+    ctx.lineTo(ox + 20, oy + 30);
+    ctx.stroke();
+  }
+}
+
+function drawBookshelf(ctx: CanvasRenderingContext2D): void {
+  drawDitheredTile(ctx, TileId.Bookshelf, { r: 132, g: 82, b: 40 }, 18, 2);
+  const [ox, oy] = tileOrigin(TileId.Bookshelf);
+  ctx.fillStyle = "rgba(45, 24, 12, 0.6)";
+  ctx.fillRect(ox + 2, oy + 7, 28, 2);
+  ctx.fillRect(ox + 2, oy + 16, 28, 2);
+  ctx.fillRect(ox + 2, oy + 25, 28, 2);
+
+  const colors = ["#a94b40", "#e2c35f", "#4f75bf", "#6aa35f", "#d8d2b7"];
+  for (let shelf = 0; shelf < 3; shelf += 1) {
+    for (let book = 0; book < 6; book += 1) {
+      ctx.fillStyle = colors[(shelf + book) % colors.length];
+      ctx.fillRect(ox + 4 + book * 4, oy + 2 + shelf * 9, 3, 6);
+    }
+  }
+}
+
+function drawIronBars(ctx: CanvasRenderingContext2D): void {
+  const [ox, oy] = tileOrigin(TileId.IronBars);
+  ctx.clearRect(ox, oy, TILE_SIZE, TILE_SIZE);
+  ctx.fillStyle = "rgba(190, 200, 198, 0.88)";
+  for (let x = 6; x < TILE_SIZE; x += 8) {
+    ctx.fillRect(ox + x, oy + 1, 3, 30);
+  }
+  ctx.fillStyle = "rgba(78, 86, 86, 0.78)";
+  ctx.fillRect(ox + 2, oy + 8, 28, 3);
+  ctx.fillRect(ox + 2, oy + 21, 28, 3);
+  ctx.fillStyle = "rgba(255, 255, 255, 0.35)";
+  ctx.fillRect(ox + 7, oy + 2, 1, 28);
+  ctx.fillRect(ox + 23, oy + 2, 1, 28);
+}
+
+function drawEndPortalFrame(ctx: CanvasRenderingContext2D, tile: TileId, withEye: boolean): void {
+  drawDitheredTile(ctx, tile, { r: 102, g: 138, b: 98 }, 26, 2);
+  const [ox, oy] = tileOrigin(tile);
+  ctx.fillStyle = "rgba(35, 55, 44, 0.72)";
+  ctx.fillRect(ox + 3, oy + 3, 26, 26);
+  ctx.fillStyle = "#b9d070";
+  ctx.fillRect(ox + 6, oy + 6, 20, 4);
+  ctx.fillRect(ox + 6, oy + 22, 20, 4);
+  ctx.fillRect(ox + 6, oy + 6, 4, 20);
+  ctx.fillRect(ox + 22, oy + 6, 4, 20);
+
+  if (withEye) {
+    ctx.fillStyle = "#83e3ac";
+    ctx.fillRect(ox + 11, oy + 11, 10, 10);
+    ctx.fillStyle = "#24443a";
+    ctx.fillRect(ox + 14, oy + 14, 4, 4);
+    ctx.fillStyle = "rgba(240, 255, 210, 0.7)";
+    ctx.fillRect(ox + 12, oy + 12, 3, 2);
+  }
+}
+
+function drawEndPortal(ctx: CanvasRenderingContext2D): void {
+  drawDitheredTile(ctx, TileId.EndPortal, { r: 4, g: 10, b: 12 }, 18, 2);
+  const [ox, oy] = tileOrigin(TileId.EndPortal);
+  for (let index = 0; index < 22; index += 1) {
+    const x = Math.floor(pseudoNoise(TileId.EndPortal, index, 5) * 30) + 1;
+    const y = Math.floor(pseudoNoise(TileId.EndPortal, index, 11) * 30) + 1;
+    ctx.fillStyle = index % 4 === 0 ? "rgba(137, 255, 195, 0.82)" : "rgba(235, 255, 255, 0.68)";
+    ctx.fillRect(ox + x, oy + y, 1 + (index % 2), 1 + (index % 2));
+  }
+}
+
 function drawSoulSand(ctx: CanvasRenderingContext2D): void {
   drawDitheredTile(ctx, TileId.SoulSand, { r: 110, g: 80, b: 66 }, 34, 2);
   const [ox, oy] = tileOrigin(TileId.SoulSand);
@@ -441,6 +543,14 @@ export function createTextureAtlas(): THREE.CanvasTexture {
   drawBasalt(ctx);
   drawOre(ctx, TileId.QuartzOre, "#e8dfcf", "#fff8e8");
   drawOre(ctx, TileId.NetherGoldOre, "#f2c84b", "#ffe899");
+  drawStoneBrickVariant(ctx, TileId.StoneBricks);
+  drawStoneBrickVariant(ctx, TileId.CrackedStoneBricks, false, true);
+  drawStoneBrickVariant(ctx, TileId.MossyStoneBricks, true);
+  drawBookshelf(ctx);
+  drawIronBars(ctx);
+  drawEndPortalFrame(ctx, TileId.EndPortalFrame, false);
+  drawEndPortalFrame(ctx, TileId.EndPortalFrameEye, true);
+  drawEndPortal(ctx);
 
   const texture = new THREE.CanvasTexture(canvas);
   texture.magFilter = THREE.NearestFilter;

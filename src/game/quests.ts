@@ -245,10 +245,26 @@ export const QUESTS: QuestDefinition[] = [
     ["road_kill_enderman"],
     crafted("eye_of_ender", 1, "엔더의 눈 제작"),
     ["ender_pearl", "blaze_powder", "eye_of_ender"],
-    { unlockHints: ["다음 대형 업데이트에서는 엔더의 눈을 던져 지상 요새를 찾는 단계가 열립니다."] }
+    { unlockHints: ["엔더의 눈을 우클릭하면 요새가 있는 방향으로 날아갑니다. 가까워지면 아래로 떨어지는 듯 반응합니다."] }
   ),
-  future("road_find_stronghold", "이후: 요새 추적", "엔더의 눈을 던져 지상 요새를 찾습니다.", ["road_make_eye"], discover("stronghold", 1, "요새 발견"), ["eye_of_ender", "diamond_pickaxe"]),
-  future("road_activate_end_portal", "이후: 엔드 포털", "엔더의 눈으로 엔드 포털을 활성화합니다.", ["road_find_stronghold"], objective("portal_ignited", "end_portal", 1, "엔드 포털 활성화"), ["diamond_sword"]),
+  main(
+    "road_find_stronghold",
+    "요새 추적",
+    "엔더의 눈을 던져 지상 어딘가의 요새를 찾고, 석재 벽돌 구조를 확인하세요.",
+    ["road_make_eye"],
+    discover("stronghold", 1, "요새 발견"),
+    ["eye_of_ender", "stone_bricks", "bookshelf", "end_portal_frame"],
+    { items: [{ item: "torch", count: 6 }], unlockHints: ["요새 안쪽 책장과 철창 주변을 수색하면 엔드 포털 방이 이어집니다."] }
+  ),
+  main(
+    "road_activate_end_portal",
+    "엔드 포털 활성화",
+    "포털 방의 빈 프레임에 엔더의 눈을 꽂아 3x3 엔드 포털을 여세요.",
+    ["road_find_stronghold"],
+    objective("portal_ignited", "end_portal", 1, "엔드 포털 활성화"),
+    ["eye_of_ender", "end_portal_frame", "diamond_sword"],
+    { unlockHints: ["활성화된 엔드 포털은 다음 업데이트에서 엔드 차원과 드래곤 전투로 이어집니다."] }
+  ),
   future("road_defeat_dragon", "이후: 드래곤", "엔드 수정과 드래곤을 상대해 엔딩을 봅니다.", ["road_activate_end_portal"], killed("dragon", 1, "드래곤 처치"), ["bow", "arrow"]),
   side("side_craft_shield", "방패 만들기", "철 주괴와 판자로 방패를 만들어 첫 원거리 공격에 대비하세요.", [], crafted("shield", 1, "방패 제작"), ["shield"]),
   side("side_equip_iron_armor", "철 방어구 장착", "철 방어구 한 부위를 입어 생존성을 올리세요.", ["main_smelt_iron"], objective("armor_equipped", "iron", 1, "철 방어구 장착"), ["iron_ingot"]),
