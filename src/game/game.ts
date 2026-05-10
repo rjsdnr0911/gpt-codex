@@ -8,6 +8,7 @@ import {
   clickArmorSlot,
   clickOffhandSlot,
   clickSlot,
+  countItems,
   createInventoryState,
   normalizeInventory,
   removeItems,
@@ -57,6 +58,7 @@ import {
   SavedBlock,
   SavedEntity,
   SavedPlayer,
+  GameMode,
   WorldSaveV2
 } from "./saveSystem";
 import { armorPoints, createSurvivalState, SurvivalController, SurvivalState } from "./survival";
@@ -147,6 +149,8 @@ export class Game {
   private dimensionModified: DimensionBlockMap = {};
   private dimensionEntities: DimensionEntityMap = {};
   private dimensionPlayers: DimensionPlayerMap = {};
+  private allowCheats = false;
+  private gameMode: GameMode = "survival";
   private portalTimer = 0;
   private readonly eyeMarkers: EyeMarker[] = [];
   private endPortalHintCooldown = 0;
@@ -208,8 +212,8 @@ export class Game {
         });
       },
       onSettingsChange: (settings) => this.updateSettings(settings),
-      onCreateWorld: (name, seed) => {
-        void this.createWorld(name, seed);
+      onCreateWorld: (name, seed, allowCheats) => {
+        void this.createWorld(name, seed, allowCheats);
       },
       onSelectWorld: (id) => {
         void this.loadWorldById(id);
@@ -232,6 +236,8 @@ export class Game {
       onHotbarKeySwap: (index, hotbarSlot) => this.handleHotbarSwap(index, hotbarSlot),
       onCraftRecipe: (recipeId, craftAll, gridSize) => this.handleRecipeFill(recipeId, craftAll, gridSize),
       onSmeltRecipe: (recipeId, smeltAll) => this.handleSmelt(recipeId, smeltAll),
+      onToggleGameMode: () => this.toggleGameMode(),
+      onGiveCreativeItem: (item) => this.giveCreativeItem(item),
       onRegenerateWorld: (id) => {
         void this.regenerateWorldCopy(id);
       },
@@ -313,6 +319,8 @@ export class Game {
       entities: [],
       dimensionEntities: { overworld: [] },
       gameRules: { mobGriefing: true },
+      allowCheats: false,
+      gameMode: "survival",
       dimension: "overworld",
       quests: createQuestState(),
       milestones: []
@@ -325,6 +333,8 @@ export class Game {
     this.dimensionModified = { overworld: [] };
     this.dimensionEntities = { overworld: [] };
     this.dimensionPlayers = {};
+    this.allowCheats = false;
+    this.gameMode = "survival";
     this.lootedChests.clear();
     this.replaceWorld(seed, [], WORLDGEN_VERSION, "overworld");
     const spawn = this.world.findSpawn();
@@ -341,6 +351,8 @@ export class Game {
   private loadWorld(save: WorldSaveV2, startPlaying: boolean): void {
     this.activeWorld = save;
     this.dimension = save.dimension ?? "overworld";
+    this.allowCheats = save.allowCheats ?? false;
+    this.gameMode = this.allowCheats ? save.gameMode ?? "survival" : "survival";
     this.dimensionModified = this.normalizeDimensionModified(save);
     this.dimensionEntities = this.normalizeDimensionEntities(save);
     this.dimensionPlayers = this.normalizeDimensionPlayers(save);
@@ -455,7 +467,7 @@ export class Game {
     this.resize();
   }
 
-  private async createWorld(name: string, seed: string): Promise<void> {
+  private async createWorld(name: string, seed: string, allowCheats = false): Promise<void> {
     this.setMode("loading");
     const now = Date.now();
     const id = `world-${now.toString(36)}`;
@@ -463,6 +475,8 @@ export class Game {
     this.dimensionModified = { overworld: [] };
     this.dimensionEntities = { overworld: [] };
     this.dimensionPlayers = {};
+    this.allowCheats = allowCheats;
+    this.gameMode = "survival";
     this.replaceWorld(seed, [], WORLDGEN_VERSION, "overworld");
     const spawn = this.world.findSpawn();
     const player = new Player(this.camera, spawn);
@@ -488,6 +502,8 @@ export class Game {
       entities: [],
       dimensionEntities: { overworld: [] },
       gameRules: { mobGriefing: true },
+      allowCheats,
+      gameMode: "survival",
       dimension: "overworld",
       quests: createQuestState(),
       milestones: []
@@ -550,6 +566,8 @@ export class Game {
       entities: [],
       dimensionEntities: { overworld: [] },
       gameRules: { mobGriefing: true },
+      allowCheats: source.allowCheats ?? false,
+      gameMode: "survival",
       dimension: "overworld",
       quests: createQuestState(),
       milestones: []
@@ -597,6 +615,91 @@ export class Game {
   private setMode(mode: HudMode): void {
     this.mode = mode;
     this.hud.setMode(mode);
+  }
+
+  private toggleGameMode(): void {
+    if (!this.allowCheats) {
+      this.hud.showToast("이 월드는 치트가 꺼져 있습니다");
+      return;
+    }
+
+    this.gameMode = this.gameMode === "creative" ? "survival" : "creative";
+
+    if (this.gameMode === "creative") {
+      this.grantCreativeStarterKit();
+      this.survival.state.health = 20;
+      this.survival.state.hunger = 20;
+      this.survival.state.air = 20;
+      this.hud.showToast("크리에이티브 모드로 전환");
+    } else {
+      this.hud.showToast("서바이벌 모드로 전환");
+    }
+
+    this.updateHud();
+    this.queueSave();
+  }
+
+  private giveCreativeItem(item: ItemId): void {
+    if (!this.allowCheats || this.gameMode !== "creative") {
+      this.hud.showToast("크리에이티브 모드에서만 지급할 수 있습니다");
+      return;
+    }
+
+    const stack = this.creativeStack(item);
+    const leftover = addStack(this.inventory, stack);
+    if (leftover) {
+      this.inventory.slots[HOTBAR_START + this.inventory.selectedHotbarSlot] = stack;
+      this.hud.showToast(`${ITEM_DEFINITIONS[item].name}을(를) 선택 슬롯에 지급`);
+    } else {
+      this.hud.showToast(`${ITEM_DEFINITIONS[item].name} 지급`);
+    }
+    this.unlockRecipesFromInventory();
+    this.queueSave();
+  }
+
+  private grantCreativeStarterKit(): void {
+    const items: ItemId[] = [
+      "grass_block",
+      "dirt",
+      "stone",
+      "planks",
+      "torch",
+      "crafting_table",
+      "chest",
+      "water_bucket",
+      "lava_bucket",
+      "diamond_pickaxe",
+      "diamond_sword",
+      "bow",
+      "arrow",
+      "obsidian",
+      "flint_and_steel",
+      "end_portal_frame",
+      "eye_of_ender",
+      "end_crystal"
+    ];
+
+    for (const item of items) {
+      if (countItems(this.inventory, item) > 0) {
+        continue;
+      }
+      addStack(this.inventory, this.creativeStack(item));
+    }
+    this.unlockRecipesFromInventory();
+  }
+
+  private creativeStack(item: ItemId): ItemStack {
+    const definition = ITEM_DEFINITIONS[item];
+    const stack: ItemStack = {
+      item,
+      count: definition.maxStack
+    };
+
+    if (definition.durability !== undefined) {
+      stack.durability = definition.durability;
+    }
+
+    return stack;
   }
 
   private readonly preventGameContextMenu = (event: MouseEvent): void => {
@@ -765,8 +868,9 @@ export class Game {
       this.input.isDown("ControlLeft") || this.input.isDown("ControlRight") || this.input.isDown("KeyR");
     const sneaking = this.input.isDown("ShiftLeft") || this.input.isDown("ShiftRight");
 
-    this.player.update(delta, this.input, this.world, this.survival.canSprint(), sneaking);
-    if (this.player.lastLandingSpeed > 13) {
+    const creative = this.gameMode === "creative";
+    this.player.update(delta, this.input, this.world, this.survival.canSprint(), sneaking, creative);
+    if (!creative && this.player.lastLandingSpeed > 13) {
       this.damagePlayer(Math.ceil((this.player.lastLandingSpeed - 12) * 0.8), false);
     }
     this.updateFootsteps(delta, moving, wantsSprint && this.survival.canSprint(), sneaking);
@@ -822,7 +926,15 @@ export class Game {
     this.updatePortalTravel(delta);
     this.updateQuestProgress();
 
-    this.survival.update(delta, this.player.isInWater(this.world), moving, wantsSprint && this.survival.canSprint());
+    if (creative) {
+      this.survival.state.health = 20;
+      this.survival.state.hunger = 20;
+      this.survival.state.saturation = Math.max(this.survival.state.saturation, 5);
+      this.survival.state.air = 20;
+      this.survival.state.alive = true;
+    } else {
+      this.survival.update(delta, this.player.isInWater(this.world), moving, wantsSprint && this.survival.canSprint());
+    }
 
     if (!this.survival.state.alive) {
       if (document.pointerLockElement) {
@@ -871,6 +983,10 @@ export class Game {
   }
 
   private damagePlayer(amount: number, blocking: boolean, source?: THREE.Vector3): number {
+    if (this.gameMode === "creative") {
+      return 0;
+    }
+
     const dealt = this.survival.damage(amount, {
       armorSlots: this.inventory.armorSlots,
       blocking: blocking && this.inventory.offhand?.item === "shield"
@@ -982,7 +1098,7 @@ export class Game {
       const held = selectedStack(this.inventory);
       const heldDefinition = held ? ITEM_DEFINITIONS[held.item] : null;
       if (heldDefinition?.toolKind === "bow") {
-        if (!removeItems(this.inventory, "arrow", 1)) {
+        if (this.gameMode !== "creative" && !removeItems(this.inventory, "arrow", 1)) {
           this.hud.showToast("화살이 필요합니다");
           return;
         }
@@ -990,7 +1106,9 @@ export class Game {
         const hit = this.mobs.hitByRay(this.player.getEyePosition(), this.player.getViewDirection(), 30, 6);
         this.attackCooldown = heldDefinition.combat?.cooldown ?? 0.9;
         this.damageHeldTool();
-        this.survival.addExhaustion(0.04);
+        if (this.gameMode !== "creative") {
+          this.survival.addExhaustion(0.04);
+        }
         this.audio.playSfx("bow", { volume: 0.36, pitch: 1.08 });
         if (hit) {
           this.audio.playSfx(hit.killed ? "mob_death" : "mob_hurt", { volume: hit.killed ? 0.42 : 0.34 });
@@ -1028,7 +1146,9 @@ export class Game {
         this.mining = null;
         this.attackCooldown = this.attackDelay();
         this.damageHeldTool();
-        this.survival.addExhaustion(0.08);
+        if (this.gameMode !== "creative") {
+          this.survival.addExhaustion(0.08);
+        }
         this.audio.playSfx(hit.killed ? "mob_death" : "mob_hurt", { volume: hit.killed ? 0.44 : 0.36 });
         this.particles.spawnMagicBurst(this.combatHitPosition(this.attackRange()), hit.hostile ? "#d85252" : "#f0d3b1", hit.killed ? 16 : 9);
         if (hit.killed) {
@@ -1055,10 +1175,18 @@ export class Game {
         this.mining = null;
         this.attackCooldown = this.attackDelay();
         this.damageHeldTool();
-        this.survival.addExhaustion(0.08);
+        if (this.gameMode !== "creative") {
+          this.survival.addExhaustion(0.08);
+        }
         this.handleDragonHit(dragonHit, "엔더 드래곤 공격");
         return;
       }
+    }
+
+    if (this.gameMode === "creative" && actions.primary && this.selectedHit) {
+      this.breakBlock(this.selectedHit);
+      this.mining = null;
+      return;
     }
 
     if (!actions.primaryHeld || !this.selectedHit) {
@@ -1363,7 +1491,9 @@ export class Game {
 
     const block = held.item === "water_bucket" ? BlockType.Water : BlockType.Lava;
     if (this.world.setBlock(x, y, z, block)) {
-      this.setSelectedStack({ item: "bucket", count: 1 });
+      if (this.gameMode !== "creative") {
+        this.setSelectedStack({ item: "bucket", count: 1 });
+      }
       this.audio.playSfx(block === BlockType.Lava ? "portal" : "block_place", { volume: block === BlockType.Lava ? 0.32 : 0.28 });
       this.particles.spawnBlockPlace(new THREE.Vector3(x + 0.5, y + 0.5, z + 0.5), BLOCKS[block].swatch);
       const hardened = this.applyFluidAt(x, y, z);
@@ -1553,13 +1683,17 @@ export class Game {
       dropCount = 2 + Math.floor(Math.random() * 5);
     }
 
+    if (this.gameMode === "creative") {
+      drop = null;
+    }
+
     if (drop) {
       const remaining = this.addStackWithFeedback({ item: drop, count: dropCount }, blockCenter);
       this.hud.showToast(remaining ? "인벤토리가 가득 찼습니다" : `${ITEM_DEFINITIONS[drop].name} 획득`);
     }
 
     const chestKey = `${hit.x},${hit.y},${hit.z}`;
-    if (hit.block === BlockType.Chest && !this.lootedChests.has(chestKey)) {
+    if (this.gameMode !== "creative" && hit.block === BlockType.Chest && !this.lootedChests.has(chestKey)) {
       for (const loot of this.chestLoot(hit)) {
         addStack(this.inventory, loot);
       }
@@ -1569,13 +1703,19 @@ export class Game {
     }
 
     this.damageHeldTool();
-    this.survival.addExhaustion(0.005);
+    if (this.gameMode !== "creative") {
+      this.survival.addExhaustion(0.005);
+    }
     this.recordQuestEvent({ type: "block_mined", target: definition.id });
     this.unlockRecipesFromInventory();
     this.queueSave();
   }
 
   private damageHeldTool(): void {
+    if (this.gameMode === "creative") {
+      return;
+    }
+
     const index = HOTBAR_START + this.inventory.selectedHotbarSlot;
     const stack = this.inventory.slots[index];
     if (!stack || stack.durability === undefined) {
@@ -1695,6 +1835,10 @@ export class Game {
   }
 
   private consumeSelected(count: number): void {
+    if (this.gameMode === "creative") {
+      return;
+    }
+
     const index = HOTBAR_START + this.inventory.selectedHotbarSlot;
     const stack = this.inventory.slots[index];
     if (!stack) {
@@ -2461,6 +2605,8 @@ export class Game {
         entities: dimensionEntities[this.dimension] ?? [],
         dimensionEntities,
         gameRules: this.activeWorld.gameRules ?? { mobGriefing: true },
+        allowCheats: this.allowCheats,
+        gameMode: this.gameMode,
         dimension: this.dimension,
         quests: normalizeQuestState(this.questState),
         milestones: [...this.questState.milestones]
@@ -2490,7 +2636,7 @@ export class Game {
     const dimensionLabel = this.dimension === "nether" ? "지옥" : this.dimension === "end" ? "엔드" : "지상";
 
     this.hud.update({
-      position: `차원 ${dimensionLabel} | 좌표 ${Math.floor(position.x)} ${Math.floor(position.y)} ${Math.floor(position.z)} | ${this.world.seed}`,
+      position: `차원 ${dimensionLabel} | 모드 ${this.gameMode === "creative" ? "크리에이티브" : "서바이벌"} | 좌표 ${Math.floor(position.x)} ${Math.floor(position.y)} ${Math.floor(position.z)} | ${this.world.seed}`,
       chunks: stats.chunks,
       mobs: this.mobs.count,
       fps: Math.round(this.fps),
@@ -2508,6 +2654,8 @@ export class Game {
       questState: this.questState,
       dimension: this.dimension,
       boss: this.endBoss.stats,
+      allowCheats: this.allowCheats,
+      gameMode: this.gameMode,
       smeltingRecipes: SMELTING_RECIPES.map((recipe) => ({
         recipe,
         smeltable: canSmelt(recipe, this.inventory)
@@ -2536,7 +2684,8 @@ export class Game {
       id: world.id,
       name: world.name,
       seed: world.seed,
-      updatedAt: world.updatedAt
+      updatedAt: world.updatedAt,
+      allowCheats: world.allowCheats ?? false
     }));
   }
 

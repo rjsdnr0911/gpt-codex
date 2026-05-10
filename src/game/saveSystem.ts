@@ -33,6 +33,8 @@ export interface GameRules {
   mobGriefing: boolean;
 }
 
+export type GameMode = "survival" | "creative";
+
 export interface SavedGameV1 {
   version: 1;
   seed: string;
@@ -59,6 +61,8 @@ export interface WorldSaveV2 {
   entities?: SavedEntity[];
   dimensionEntities?: Partial<Record<DimensionId, SavedEntity[]>>;
   gameRules?: GameRules;
+  allowCheats?: boolean;
+  gameMode?: GameMode;
   dimension?: DimensionId;
   quests?: QuestState;
   milestones?: string[];

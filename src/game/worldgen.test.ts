@@ -1,7 +1,39 @@
 import { describe, expect, it } from "vitest";
 import * as THREE from "three";
-import { BlockType } from "./blocks";
+import { BlockType, WORLD_HEIGHT } from "./blocks";
 import { WORLDGEN_VERSION, World } from "./world";
+
+function countBlocks(
+  world: World,
+  centerX: number,
+  centerZ: number,
+  radius: number,
+  minY: number,
+  maxY: number,
+  blocks: BlockType[]
+): Map<BlockType, number> {
+  const targets = new Set(blocks);
+  const counts = new Map<BlockType, number>();
+
+  for (let z = centerZ - radius; z <= centerZ + radius; z += 1) {
+    for (let x = centerX - radius; x <= centerX + radius; x += 1) {
+      for (let y = minY; y <= maxY; y += 1) {
+        const block = world.getBlock(x, y, z);
+        if (targets.has(block)) {
+          counts.set(block, (counts.get(block) ?? 0) + 1);
+        }
+      }
+    }
+  }
+
+  return counts;
+}
+
+function addCounts(target: Map<BlockType, number>, source: Map<BlockType, number>): void {
+  for (const [block, count] of source) {
+    target.set(block, (target.get(block) ?? 0) + count);
+  }
+}
 
 describe("world generation", () => {
   it("generates deterministic caves and ore families in v3 worlds", () => {
@@ -100,4 +132,75 @@ describe("world generation", () => {
 
     expect(crystals.length).toBe(8);
   });
+
+  it("places deterministic overworld landmark structures", () => {
+    const world = new World("landmark-seed", {} as never, WORLDGEN_VERSION);
+
+    const trackedBlocks = [
+      BlockType.Bed,
+      BlockType.Chest,
+      BlockType.Bookshelf,
+      BlockType.Obsidian,
+      BlockType.RuinedPortalDebris,
+      BlockType.Basalt,
+      BlockType.StoneBricks,
+      BlockType.Planks,
+      BlockType.Log
+    ];
+    const surfaceCounts = new Map<BlockType, number>();
+    for (const [x, y, z, radius] of [
+      [48, 36, 48, 34],
+      [-72, 24, 20, 20],
+      [64, 36, -64, 14],
+      [-96, 10, -96, 36],
+      [128, 40, -96, 36],
+      [96, 18, 96, 30]
+    ] as const) {
+      world.ensureChunksAround(new THREE.Vector3(x, y, z), 4);
+      addCounts(surfaceCounts, countBlocks(world, x, z, radius, 2, WORLD_HEIGHT - 1, trackedBlocks));
+    }
+
+    expect(surfaceCounts.get(BlockType.Bed) ?? 0).toBeGreaterThanOrEqual(4);
+    expect(surfaceCounts.get(BlockType.Chest) ?? 0).toBeGreaterThanOrEqual(6);
+    expect(surfaceCounts.get(BlockType.Bookshelf) ?? 0).toBeGreaterThan(10);
+    expect((surfaceCounts.get(BlockType.Obsidian) ?? 0) + (surfaceCounts.get(BlockType.RuinedPortalDebris) ?? 0)).toBeGreaterThan(12);
+    expect(surfaceCounts.get(BlockType.Basalt) ?? 0).toBeGreaterThan(40);
+    expect(surfaceCounts.get(BlockType.Planks) ?? 0).toBeGreaterThan(400);
+  }, 20000);
+
+  it("places nether fortress, bastion, and end city landmarks", () => {
+    const nether = new World("landmark-seed", {} as never, WORLDGEN_VERSION, "nether");
+    const netherCounts = new Map<BlockType, number>();
+    nether.ensureChunksAround(new THREE.Vector3(0, 37, -64), 3);
+    addCounts(netherCounts, countBlocks(nether, 0, -64, 45, 20, 55, [
+      BlockType.NetherBrick,
+      BlockType.Basalt,
+      BlockType.NetherGoldOre,
+      BlockType.Chest
+    ]));
+    nether.ensureChunksAround(new THREE.Vector3(72, 34, 24), 3);
+    addCounts(netherCounts, countBlocks(nether, 72, 24, 40, 20, 55, [
+      BlockType.NetherBrick,
+      BlockType.Basalt,
+      BlockType.NetherGoldOre,
+      BlockType.Chest
+    ]));
+    expect(netherCounts.get(BlockType.NetherBrick) ?? 0).toBeGreaterThan(300);
+    expect(netherCounts.get(BlockType.Basalt) ?? 0).toBeGreaterThan(80);
+    expect(netherCounts.get(BlockType.NetherGoldOre) ?? 0).toBeGreaterThanOrEqual(2);
+    expect(netherCounts.get(BlockType.Chest) ?? 0).toBeGreaterThanOrEqual(2);
+
+    const end = new World("landmark-seed", {} as never, WORLDGEN_VERSION, "end");
+    end.ensureChunksAround(new THREE.Vector3(54, 45, 30), 3);
+    const endCounts = countBlocks(end, 54, 30, 30, 35, 68, [
+      BlockType.EndStoneBricks,
+      BlockType.IronBars,
+      BlockType.Chest,
+      BlockType.EndCrystal
+    ]);
+    expect(endCounts.get(BlockType.EndStoneBricks) ?? 0).toBeGreaterThan(160);
+    expect(endCounts.get(BlockType.IronBars) ?? 0).toBeGreaterThan(8);
+    expect(endCounts.get(BlockType.Chest) ?? 0).toBeGreaterThanOrEqual(1);
+    expect(endCounts.get(BlockType.EndCrystal) ?? 0).toBeGreaterThanOrEqual(1);
+  }, 20000);
 });

@@ -17,6 +17,7 @@ import {
 import { SmeltingRecipe } from "../game/smelting";
 import { SurvivalState } from "../game/survival";
 import { DEFAULT_SETTINGS, GameSettings, GraphicsQuality } from "../game/settings";
+import { GameMode } from "../game/saveSystem";
 
 export type HudMode =
   | "title"
@@ -36,6 +37,7 @@ export interface WorldSummary {
   name: string;
   seed: string;
   updatedAt: number;
+  allowCheats?: boolean;
 }
 
 export interface RecipeView {
@@ -51,7 +53,7 @@ export interface HudCallbacks {
   onOptionsBack: (target: "title" | "paused") => void;
   onUiAction: (action: "click" | "hover") => void;
   onSettingsChange: (settings: Partial<GameSettings>) => void;
-  onCreateWorld: (name: string, seed: string) => void;
+  onCreateWorld: (name: string, seed: string, allowCheats: boolean) => void;
   onSelectWorld: (id: string) => void;
   onDeleteWorld: (id: string) => void;
   onBackToTitle: () => void;
@@ -67,6 +69,8 @@ export interface HudCallbacks {
   onHotbarKeySwap: (index: number, hotbarSlot: number) => void;
   onCraftRecipe: (recipeId: string, craftAll: boolean, gridSize: 2 | 3) => void;
   onSmeltRecipe: (recipeId: string, smeltAll: boolean) => void;
+  onToggleGameMode: () => void;
+  onGiveCreativeItem: (item: ItemId) => void;
   onRegenerateWorld: (id: string) => void;
   onResetAll: () => void;
 }
@@ -91,6 +95,8 @@ export interface HudStats {
   dimension: DimensionId;
   smeltingRecipes: Array<{ recipe: SmeltingRecipe; smeltable: boolean }>;
   boss: EndBossStats | null;
+  allowCheats: boolean;
+  gameMode: GameMode;
   settings: GameSettings;
 }
 
@@ -577,7 +583,7 @@ export class Hud {
       const title = document.createElement("strong");
       title.textContent = world.name;
       const meta = document.createElement("span");
-      meta.textContent = `${world.seed} | ${new Date(world.updatedAt).toLocaleString()}`;
+      meta.textContent = `${world.seed} | ${world.allowCheats ? "치트 허용 | " : ""}${new Date(world.updatedAt).toLocaleString()}`;
       main.append(title, meta);
 
       const del = document.createElement("button");
@@ -625,15 +631,25 @@ export class Hud {
     seed.placeholder = "시드";
     seed.value = `codex-${Math.floor(Date.now() / 1000).toString(36)}`;
 
+    const cheats = document.createElement("label");
+    cheats.className = "create-cheats-row";
+    const cheatsText = document.createElement("span");
+    cheatsText.textContent = "치트 허용";
+    const cheatsHelp = document.createElement("em");
+    cheatsHelp.textContent = "이 월드는 인벤토리에서 크리에이티브/서바이벌 전환 가능";
+    const cheatsInput = document.createElement("input");
+    cheatsInput.type = "checkbox";
+    cheats.append(cheatsText, cheatsHelp, cheatsInput);
+
     const actions = document.createElement("div");
     actions.className = "menu-actions";
     const create = this.makeMenuButton("생성", () => undefined);
     create.type = "submit";
     actions.append(create, this.makeMenuButton("취소", this.callbacks.onBackToTitle));
-    form.append(name, seed, actions);
+    form.append(name, seed, cheats, actions);
     form.addEventListener("submit", (event) => {
       event.preventDefault();
-      this.callbacks.onCreateWorld(name.value.trim() || "새 월드", seed.value.trim() || "codex-aurora");
+      this.callbacks.onCreateWorld(name.value.trim() || "새 월드", seed.value.trim() || "codex-aurora", cheatsInput.checked);
     });
     panel.append(form);
     return panel;
@@ -693,7 +709,20 @@ export class Hud {
 
     const title = document.createElement("div");
     title.className = "inventory-title";
-    title.textContent = gridSize === 3 ? "제작대" : "인벤토리";
+    const titleText = document.createElement("strong");
+    titleText.textContent = gridSize === 3 ? "제작대" : "인벤토리";
+    title.append(titleText);
+    if (stats.allowCheats) {
+      const modeBadge = document.createElement("span");
+      modeBadge.className = "mode-badge";
+      modeBadge.textContent = stats.gameMode === "creative" ? "치트 · 크리에이티브" : "치트 · 서바이벌";
+      const modeButton = document.createElement("button");
+      modeButton.className = "mode-toggle-button";
+      modeButton.type = "button";
+      modeButton.textContent = stats.gameMode === "creative" ? "서바이벌 전환" : "크리에이티브 전환";
+      modeButton.addEventListener("click", this.callbacks.onToggleGameMode);
+      title.append(modeBadge, modeButton);
+    }
 
     const recipeBook = document.createElement("div");
     recipeBook.className = "recipe-book";
@@ -1009,6 +1038,15 @@ export class Hud {
     const sources = this.dropSources(item.id);
 
     detail.append(head, meta);
+
+    if (stats.allowCheats && stats.gameMode === "creative") {
+      const give = document.createElement("button");
+      give.className = "recipe-fill-button creative-give-button";
+      give.type = "button";
+      give.textContent = "지급";
+      give.addEventListener("click", () => this.callbacks.onGiveCreativeItem(item.id));
+      detail.append(give);
+    }
 
     if (recipes.length > 0) {
       detail.append(this.makeCatalogSectionTitle("제작법"));
@@ -1726,7 +1764,7 @@ export class Hud {
     const quests = `${stats.dimension}|${stats.questState.activeMainQuestId ?? "-"}|${stats.questState.trackedSideQuestIds.join(",")}|${stats.questState.completed.join(",")}|${Object.entries(stats.questState.progress)
       .map(([key, value]) => `${key}:${value}`)
       .join(",")}`;
-    return `${this.mode}|${slots}|${armor}|${offhand}|${cursor}|${crafting}|${result}|${recipes}|${smelting}|${boss}|${settings}|${quests}`;
+    return `${this.mode}|${stats.allowCheats ? 1 : 0}|${stats.gameMode}|${slots}|${armor}|${offhand}|${cursor}|${crafting}|${result}|${recipes}|${smelting}|${boss}|${settings}|${quests}`;
   }
 
   private numberFromEvent(event: MouseEvent): number | null {

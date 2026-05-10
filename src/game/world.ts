@@ -886,6 +886,8 @@ class Chunk {
       return;
     }
 
+    this.placeOverworldLandmarks();
+
     const startX = this.cx * CHUNK_SIZE;
     const startZ = this.cz * CHUNK_SIZE;
     const centerX = startX + 4 + Math.floor(hash3(this.world.seedInt ^ 0x5cab1, this.cx, 20, this.cz) * 8);
@@ -910,6 +912,327 @@ class Chunk {
     }
 
     this.placeStronghold();
+  }
+
+  private placeOverworldLandmarks(): void {
+    this.placeVillage(48, 48);
+    this.placeShipwreck(-72, 20);
+    this.placeRuinedPortalLandmark(64, -64);
+    this.placeAncientCity(-96, 10, -96);
+    this.placeWoodlandMansion(128, -96);
+    this.placeMineshaft(96, 18, 96);
+  }
+
+  private chunkIntersects(centerX: number, centerZ: number, radius: number): boolean {
+    const startX = this.cx * CHUNK_SIZE;
+    const startZ = this.cz * CHUNK_SIZE;
+    return !(
+      startX > centerX + radius ||
+      startX + CHUNK_SIZE < centerX - radius ||
+      startZ > centerZ + radius ||
+      startZ + CHUNK_SIZE < centerZ - radius
+    );
+  }
+
+  private structureBaseY(x: number, z: number, radius: number, minY = WATER_LEVEL + 2, topPadding = 12): number {
+    let baseY = minY;
+    for (const dz of [-radius, 0, radius]) {
+      for (const dx of [-radius, 0, radius]) {
+        baseY = Math.max(baseY, this.world.terrainHeight(x + dx, z + dz) + 1);
+      }
+    }
+    return Math.floor(clamp(baseY, 5, WORLD_HEIGHT - topPadding));
+  }
+
+  private prepareSurfacePad(
+    centerX: number,
+    centerZ: number,
+    baseY: number,
+    minX: number,
+    maxX: number,
+    minZ: number,
+    maxZ: number,
+    floor: BlockType
+  ): void {
+    for (let dz = minZ; dz <= maxZ; dz += 1) {
+      for (let dx = minX; dx <= maxX; dx += 1) {
+        const x = centerX + dx;
+        const z = centerZ + dz;
+        const terrain = this.world.terrainHeight(x, z);
+        for (let y = Math.max(1, terrain + 1); y < baseY; y += 1) {
+          this.placeGlobal(x, y, z, y < baseY - 1 ? BlockType.Dirt : floor, true);
+        }
+        this.placeGlobal(x, baseY - 1, z, floor, true);
+      }
+    }
+  }
+
+  private placeVillage(centerX: number, centerZ: number): void {
+    if (!this.chunkIntersects(centerX, centerZ, 32)) {
+      return;
+    }
+
+    const baseY = this.structureBaseY(centerX, centerZ, 18, WATER_LEVEL + 3, 12);
+    this.prepareSurfacePad(centerX, centerZ, baseY, -24, 24, -24, 24, BlockType.Grass);
+
+    for (let offset = -24; offset <= 24; offset += 1) {
+      for (let side = -1; side <= 1; side += 1) {
+        this.placeGlobal(centerX + offset, baseY - 1, centerZ + side, BlockType.Gravel, true);
+        this.placeGlobal(centerX + side, baseY - 1, centerZ + offset, BlockType.Gravel, true);
+      }
+    }
+
+    this.placeVillageWell(centerX, baseY, centerZ);
+    this.placeVillageHouse(centerX - 14, baseY, centerZ - 10, 4, 4, "smith");
+    this.placeVillageHouse(centerX + 14, baseY, centerZ - 8, 4, 3, "farmer");
+    this.placeVillageHouse(centerX - 13, baseY, centerZ + 13, 3, 4, "library");
+    this.placeVillageHouse(centerX + 14, baseY, centerZ + 13, 4, 4, "home");
+    this.placeVillageFarm(centerX, baseY, centerZ + 20);
+  }
+
+  private placeVillageHouse(
+    centerX: number,
+    baseY: number,
+    centerZ: number,
+    halfWidth: number,
+    halfDepth: number,
+    role: "home" | "farmer" | "library" | "smith"
+  ): void {
+    for (let dz = -halfDepth; dz <= halfDepth; dz += 1) {
+      for (let dx = -halfWidth; dx <= halfWidth; dx += 1) {
+        this.placeGlobal(centerX + dx, baseY - 1, centerZ + dz, BlockType.Planks, true);
+        for (let dy = 0; dy <= 4; dy += 1) {
+          const edge = Math.abs(dx) === halfWidth || Math.abs(dz) === halfDepth;
+          const corner = Math.abs(dx) === halfWidth && Math.abs(dz) === halfDepth;
+          const roof = dy === 4 || (dy === 3 && (Math.abs(dx) >= halfWidth - 1 || Math.abs(dz) >= halfDepth - 1));
+          const doorway = dz === -halfDepth && Math.abs(dx) <= 1 && dy <= 2;
+          const block = roof
+            ? BlockType.Planks
+            : edge && !doorway
+              ? corner
+                ? BlockType.Log
+                : BlockType.Planks
+              : BlockType.Air;
+          this.placeGlobal(centerX + dx, baseY + dy, centerZ + dz, block, true);
+        }
+      }
+    }
+
+    this.placeGlobal(centerX, baseY, centerZ - halfDepth, BlockType.Air, true);
+    this.placeGlobal(centerX, baseY + 1, centerZ - halfDepth, BlockType.Air, true);
+    this.placeGlobal(centerX - halfWidth + 1, baseY + 1, centerZ, BlockType.Torch, true);
+    this.placeGlobal(centerX + halfWidth - 1, baseY, centerZ + halfDepth - 1, BlockType.Bed, true);
+
+    if (role === "smith") {
+      this.placeGlobal(centerX + 1, baseY, centerZ + 1, BlockType.Furnace, true);
+      this.placeGlobal(centerX - 1, baseY, centerZ + 1, BlockType.Chest, true);
+      this.placeGlobal(centerX + halfWidth, baseY, centerZ - halfDepth - 1, BlockType.Lava, true);
+    } else if (role === "library") {
+      for (let dz = -halfDepth + 1; dz <= halfDepth - 1; dz += 1) {
+        this.placeGlobal(centerX - halfWidth + 1, baseY, centerZ + dz, BlockType.Bookshelf, true);
+        this.placeGlobal(centerX - halfWidth + 1, baseY + 1, centerZ + dz, BlockType.Bookshelf, true);
+      }
+      this.placeGlobal(centerX + 1, baseY, centerZ, BlockType.CraftingTable, true);
+    } else if (role === "farmer") {
+      this.placeGlobal(centerX - 1, baseY, centerZ, BlockType.Chest, true);
+      this.placeGlobal(centerX + 1, baseY, centerZ, BlockType.CraftingTable, true);
+    } else {
+      this.placeGlobal(centerX, baseY, centerZ + 1, BlockType.Chest, true);
+    }
+  }
+
+  private placeVillageWell(centerX: number, baseY: number, centerZ: number): void {
+    for (let dz = -2; dz <= 2; dz += 1) {
+      for (let dx = -2; dx <= 2; dx += 1) {
+        const edge = Math.abs(dx) === 2 || Math.abs(dz) === 2;
+        this.placeGlobal(centerX + dx, baseY - 1, centerZ + dz, edge ? BlockType.StoneBricks : BlockType.Water, true);
+        if (edge) {
+          this.placeGlobal(centerX + dx, baseY, centerZ + dz, BlockType.StoneBricks, true);
+        }
+      }
+    }
+    for (const [dx, dz] of [
+      [-2, -2],
+      [2, -2],
+      [-2, 2],
+      [2, 2]
+    ]) {
+      this.placeGlobal(centerX + dx, baseY + 1, centerZ + dz, BlockType.Log, true);
+      this.placeGlobal(centerX + dx, baseY + 2, centerZ + dz, BlockType.Log, true);
+    }
+    this.placeGlobal(centerX, baseY + 3, centerZ, BlockType.Planks, true);
+  }
+
+  private placeVillageFarm(centerX: number, baseY: number, centerZ: number): void {
+    for (let dz = -4; dz <= 4; dz += 1) {
+      for (let dx = -8; dx <= 8; dx += 1) {
+        const x = centerX + dx;
+        const z = centerZ + dz;
+        const water = dx === 0;
+        this.placeGlobal(x, baseY - 1, z, water ? BlockType.Water : BlockType.Dirt, true);
+        this.placeGlobal(x, baseY, z, BlockType.Air, true);
+        if (!water && Math.abs(dx) % 3 === 0 && Math.abs(dz) % 2 === 0) {
+          this.placeGlobal(x, baseY, z, BlockType.Leaves, false);
+        }
+      }
+    }
+    this.placeGlobal(centerX - 9, baseY, centerZ, BlockType.Torch, true);
+    this.placeGlobal(centerX + 9, baseY, centerZ, BlockType.Torch, true);
+  }
+
+  private placeShipwreck(centerX: number, centerZ: number): void {
+    if (!this.chunkIntersects(centerX, centerZ, 18)) {
+      return;
+    }
+
+    const baseY = WATER_LEVEL - 3;
+    for (let dz = -6; dz <= 6; dz += 1) {
+      for (let dx = -10; dx <= 10; dx += 1) {
+        const distance = Math.abs(dx) / 10 + Math.abs(dz) / 6;
+        for (let dy = 0; dy <= 5; dy += 1) {
+          if (distance > 1.35 || (dy > 3 && Math.abs(dx) > 3)) {
+            continue;
+          }
+          const hull = dy === 0 || Math.abs(dz) === 6 || Math.abs(dx) >= 9 || (dy === 3 && Math.abs(dx) <= 5);
+          const broken = hash3(this.world.seedInt ^ 0x51a9, centerX + dx, baseY + dy, centerZ + dz) < 0.16;
+          this.placeGlobal(centerX + dx, baseY + dy, centerZ + dz, hull && !broken ? BlockType.Planks : BlockType.Air, true);
+        }
+        for (let y = baseY + 4; y <= WATER_LEVEL; y += 1) {
+          if (Math.abs(dx) <= 8 && Math.abs(dz) <= 4) {
+            this.placeGlobal(centerX + dx, y, centerZ + dz, BlockType.Water, true);
+          }
+        }
+      }
+    }
+
+    for (let y = baseY + 1; y <= baseY + 5; y += 1) {
+      this.placeGlobal(centerX - 2, y, centerZ, BlockType.Log, true);
+    }
+    this.placeGlobal(centerX - 6, baseY + 1, centerZ - 3, BlockType.Chest, true);
+    this.placeGlobal(centerX + 5, baseY + 1, centerZ + 2, BlockType.Chest, true);
+    this.placeGlobal(centerX + 2, baseY + 2, centerZ, BlockType.Torch, true);
+  }
+
+  private placeRuinedPortalLandmark(centerX: number, centerZ: number): void {
+    if (!this.chunkIntersects(centerX, centerZ, 10)) {
+      return;
+    }
+
+    const baseY = this.structureBaseY(centerX, centerZ, 5, WATER_LEVEL + 3, 9);
+    for (let dz = -4; dz <= 4; dz += 1) {
+      for (let dx = -4; dx <= 4; dx += 1) {
+        const distance = Math.hypot(dx, dz);
+        if (distance <= 4.4) {
+          this.placeGlobal(centerX + dx, baseY - 1, centerZ + dz, distance > 3.1 ? BlockType.RuinedPortalDebris : BlockType.Gravel, true);
+          this.placeGlobal(centerX + dx, baseY, centerZ + dz, BlockType.Air, true);
+        }
+      }
+    }
+
+    for (let y = 0; y <= 4; y += 1) {
+      this.placeGlobal(centerX - 2, baseY + y, centerZ, y === 1 ? BlockType.RuinedPortalDebris : BlockType.Obsidian, true);
+      this.placeGlobal(centerX + 1, baseY + y, centerZ, y === 3 ? BlockType.RuinedPortalDebris : BlockType.Obsidian, true);
+    }
+    for (let dx = -2; dx <= 1; dx += 1) {
+      this.placeGlobal(centerX + dx, baseY, centerZ, dx === -1 ? BlockType.RuinedPortalDebris : BlockType.Obsidian, true);
+      this.placeGlobal(centerX + dx, baseY + 4, centerZ, dx === 0 ? BlockType.RuinedPortalDebris : BlockType.Obsidian, true);
+    }
+    this.placeGlobal(centerX + 3, baseY, centerZ - 1, BlockType.Chest, true);
+    this.placeGlobal(centerX - 3, baseY, centerZ + 2, BlockType.Lava, true);
+    this.placeGlobal(centerX + 2, baseY + 1, centerZ + 2, BlockType.Torch, true);
+  }
+
+  private placeAncientCity(centerX: number, baseY: number, centerZ: number): void {
+    if (!this.chunkIntersects(centerX, centerZ, 34)) {
+      return;
+    }
+
+    for (let dz = -24; dz <= 24; dz += 1) {
+      for (let dx = -28; dx <= 28; dx += 1) {
+        const distance = Math.hypot(dx / 1.25, dz);
+        if (distance > 26.5) {
+          continue;
+        }
+        for (let dy = -1; dy <= 8; dy += 1) {
+          const edge = distance > 23.5 || dy === -1;
+          const ceiling = dy === 8 && distance < 21;
+          const rib = (Math.abs(dx) === 12 || Math.abs(dx) === 20 || Math.abs(dz) === 10 || Math.abs(dz) === 18) && dy <= 5;
+          const block = edge || ceiling
+            ? this.ancientBrickAt(centerX + dx, baseY + dy, centerZ + dz)
+            : rib
+              ? BlockType.Basalt
+              : BlockType.Air;
+          this.placeGlobal(centerX + dx, baseY + dy, centerZ + dz, block, true);
+        }
+      }
+    }
+
+    for (let dz = -6; dz <= 6; dz += 1) {
+      for (let dx = -8; dx <= 8; dx += 1) {
+        const frame = Math.abs(dx) === 8 || Math.abs(dz) === 6 || Math.abs(dx) === 7 || Math.abs(dz) === 5;
+        this.placeGlobal(centerX + dx, baseY, centerZ + dz, frame ? BlockType.Basalt : BlockType.SoulSand, true);
+      }
+    }
+    this.placeGlobal(centerX, baseY + 1, centerZ, BlockType.Chest, true);
+    this.placeGlobal(centerX - 10, baseY + 1, centerZ - 8, BlockType.Chest, true);
+    this.placeGlobal(centerX + 10, baseY + 1, centerZ + 8, BlockType.Chest, true);
+    this.placeGlobal(centerX - 18, baseY + 1, centerZ, BlockType.IronBars, true);
+    this.placeGlobal(centerX + 18, baseY + 1, centerZ, BlockType.IronBars, true);
+  }
+
+  private ancientBrickAt(x: number, y: number, z: number): BlockType {
+    const roll = hash3(this.world.seedInt ^ 0xac17, x, y, z);
+    if (roll < 0.16) {
+      return BlockType.CrackedStoneBricks;
+    }
+    if (roll < 0.36) {
+      return BlockType.MossyStoneBricks;
+    }
+    return BlockType.StoneBricks;
+  }
+
+  private placeWoodlandMansion(centerX: number, centerZ: number): void {
+    if (!this.chunkIntersects(centerX, centerZ, 34)) {
+      return;
+    }
+
+    const baseY = this.structureBaseY(centerX, centerZ, 20, WATER_LEVEL + 4, 16);
+    this.prepareSurfacePad(centerX, centerZ, baseY, -22, 22, -18, 18, BlockType.StoneBricks);
+
+    for (let dz = -16; dz <= 16; dz += 1) {
+      for (let dx = -20; dx <= 20; dx += 1) {
+        for (let dy = 0; dy <= 9; dy += 1) {
+          const edge = Math.abs(dx) === 20 || Math.abs(dz) === 16;
+          const floor = dy === 0 || dy === 4;
+          const roof = dy === 9 || (dy === 8 && (Math.abs(dx) > 16 || Math.abs(dz) > 12));
+          const divider = (dx === 0 || dz === 0 || Math.abs(dx) === 10) && dy <= 7 && dy !== 3;
+          const door = dz === -16 && Math.abs(dx) <= 2 && dy <= 3;
+          const block = floor
+            ? BlockType.Planks
+            : roof
+              ? BlockType.Log
+              : (edge || divider) && !door
+                ? (Math.abs(dx) === 20 || Math.abs(dz) === 16 ? BlockType.Log : BlockType.Planks)
+                : BlockType.Air;
+          this.placeGlobal(centerX + dx, baseY + dy, centerZ + dz, block, true);
+        }
+      }
+    }
+
+    for (let room = -1; room <= 1; room += 1) {
+      this.placeGlobal(centerX - 14 + room * 10, baseY + 1, centerZ - 10, BlockType.Chest, true);
+      this.placeGlobal(centerX + 14 - room * 8, baseY + 5, centerZ + 10, BlockType.Bookshelf, true);
+      this.placeGlobal(centerX + room * 8, baseY + 1, centerZ + 2, BlockType.Torch, true);
+    }
+    for (let z = -12; z <= -4; z += 1) {
+      for (let y = 1; y <= 3; y += 1) {
+        this.placeGlobal(centerX - 18, baseY + y, centerZ + z, BlockType.Bookshelf, true);
+        this.placeGlobal(centerX - 12, baseY + y, centerZ + z, BlockType.Bookshelf, true);
+      }
+    }
+    this.placeGlobal(centerX - 16, baseY + 1, centerZ + 12, BlockType.Bed, true);
+    this.placeGlobal(centerX + 16, baseY + 1, centerZ + 12, BlockType.Bed, true);
+    this.placeGlobal(centerX, baseY + 1, centerZ - 12, BlockType.CraftingTable, true);
   }
 
   private placeStronghold(): void {
@@ -1081,6 +1404,8 @@ class Chunk {
   }
 
   private placeNetherStructures(): void {
+    this.placeBastionRemnant(72, 34, 24);
+
     const guaranteedBridge = this.cz === -4 && this.cx >= -2 && this.cx <= 2;
     const guaranteedCross = this.cx === 0 && this.cz >= -5 && this.cz <= -3;
     const randomFortress = hash3(this.world.seedInt ^ 0xf047, Math.floor(this.cx / 7), 0, Math.floor(this.cz / 7)) < 0.035;
@@ -1096,6 +1421,102 @@ class Chunk {
   private placeEndStructures(): void {
     this.placeEndSpawnPlatform();
     this.placeEndPillars();
+    this.placeEndCity(54, 30);
+  }
+
+  private placeBastionRemnant(centerX: number, baseY: number, centerZ: number): void {
+    if (!this.chunkIntersects(centerX, centerZ, 28)) {
+      return;
+    }
+
+    for (let dz = -18; dz <= 18; dz += 1) {
+      for (let dx = -18; dx <= 18; dx += 1) {
+        const distance = Math.max(Math.abs(dx), Math.abs(dz));
+        for (let dy = -2; dy <= 14; dy += 1) {
+          const ruinGap = hash3(this.world.seedInt ^ 0xba57, centerX + dx, baseY + dy, centerZ + dz) < 0.1;
+          const outer = distance >= 15 || dy === -2 || dy === 14;
+          const tier = dy === 2 || dy === 7;
+          const ramp = Math.abs(dx + dz) <= 2 && dy >= -1 && dy <= 8;
+          const balcony = (Math.abs(dx) === 8 || Math.abs(dz) === 8) && dy < 9;
+          const block = outer || tier || ramp || balcony
+            ? ruinGap
+              ? BlockType.Air
+              : this.bastionBlockAt(centerX + dx, baseY + dy, centerZ + dz)
+            : BlockType.Air;
+          this.placeGlobal(centerX + dx, baseY + dy, centerZ + dz, block, true);
+        }
+      }
+    }
+
+    this.placeGlobal(centerX, baseY + 1, centerZ, BlockType.Chest, true);
+    this.placeGlobal(centerX + 5, baseY + 3, centerZ - 5, BlockType.NetherGoldOre, true);
+    this.placeGlobal(centerX - 5, baseY + 8, centerZ + 4, BlockType.NetherGoldOre, true);
+    this.placeGlobal(centerX + 10, baseY, centerZ + 10, BlockType.Lava, true);
+    this.placeGlobal(centerX - 10, baseY + 5, centerZ - 9, BlockType.Chest, true);
+  }
+
+  private bastionBlockAt(x: number, y: number, z: number): BlockType {
+    const roll = hash3(this.world.seedInt ^ 0xb057, x, y, z);
+    if (roll < 0.18) {
+      return BlockType.Basalt;
+    }
+    if (roll < 0.32) {
+      return BlockType.CrackedStoneBricks;
+    }
+    return BlockType.NetherBrick;
+  }
+
+  private placeEndCity(centerX: number, centerZ: number): void {
+    if (!this.chunkIntersects(centerX, centerZ, 24)) {
+      return;
+    }
+
+    const baseY = Math.max(this.world.terrainHeight(centerX, centerZ) + 1, 38);
+    this.placeEndCityTower(centerX, baseY, centerZ, 4, 18);
+    this.placeEndCityTower(centerX + 13, baseY + 8, centerZ + 8, 3, 13);
+    this.placeEndCityBridge(centerX + 4, baseY + 8, centerZ + 2, centerX + 10, centerZ + 8);
+    this.placeGlobal(centerX + 13, baseY + 10, centerZ + 8, BlockType.Chest, true);
+    this.placeGlobal(centerX + 13, baseY + 11, centerZ + 8, BlockType.EndCrystal, true);
+  }
+
+  private placeEndCityTower(centerX: number, baseY: number, centerZ: number, radius: number, height: number): void {
+    for (let dz = -radius; dz <= radius; dz += 1) {
+      for (let dx = -radius; dx <= radius; dx += 1) {
+        const edge = Math.abs(dx) === radius || Math.abs(dz) === radius;
+        for (let dy = 0; dy <= height; dy += 1) {
+          const floor = dy % 5 === 0;
+          const roof = dy === height;
+          const window = edge && dy % 5 === 2 && Math.abs(dx + dz) % 2 === 0;
+          this.placeGlobal(
+            centerX + dx,
+            baseY + dy,
+            centerZ + dz,
+            floor || roof || (edge && !window) ? BlockType.EndStoneBricks : BlockType.Air,
+            true
+          );
+        }
+      }
+    }
+
+    for (let dy = 1; dy < height; dy += 4) {
+      this.placeGlobal(centerX + radius, baseY + dy, centerZ, BlockType.IronBars, true);
+      this.placeGlobal(centerX - radius, baseY + dy, centerZ, BlockType.IronBars, true);
+    }
+  }
+
+  private placeEndCityBridge(startX: number, y: number, startZ: number, endX: number, endZ: number): void {
+    const steps = Math.max(Math.abs(endX - startX), Math.abs(endZ - startZ));
+    for (let step = 0; step <= steps; step += 1) {
+      const t = steps === 0 ? 0 : step / steps;
+      const x = Math.round(startX + (endX - startX) * t);
+      const z = Math.round(startZ + (endZ - startZ) * t);
+      for (let side = -1; side <= 1; side += 1) {
+        this.placeGlobal(x, y, z + side, BlockType.EndStoneBricks, true);
+        this.placeGlobal(x, y + 1, z + side, BlockType.Air, true);
+      }
+      this.placeGlobal(x, y + 1, z - 2, BlockType.IronBars, true);
+      this.placeGlobal(x, y + 1, z + 2, BlockType.IronBars, true);
+    }
   }
 
   private placeEndSpawnPlatform(): void {
@@ -1326,24 +1747,65 @@ class Chunk {
   }
 
   private placeMineshaft(x: number, y: number, z: number): void {
-    for (let offset = -8; offset <= 8; offset += 1) {
-      for (let dy = 0; dy <= 2; dy += 1) {
-        for (let dz = -1; dz <= 1; dz += 1) {
-          this.placeGlobal(x + offset, y + dy, z + dz, BlockType.Air, true);
+    if (!this.chunkIntersects(x, z, 28)) {
+      return;
+    }
+
+    this.placeMineshaftCorridor(x, y, z, "x", -18, 18);
+    this.placeMineshaftCorridor(x, y, z, "z", -14, 16);
+    this.placeMineshaftCorridor(x + 12, y + 1, z + 12, "x", -8, 10);
+    this.placeMineshaftCorridor(x - 14, y - 1, z - 10, "z", -8, 9);
+
+    for (let dz = -4; dz <= 4; dz += 1) {
+      for (let dx = -4; dx <= 4; dx += 1) {
+        for (let dy = -1; dy <= 3; dy += 1) {
+          const edge = Math.abs(dx) === 4 || Math.abs(dz) === 4 || dy === -1;
+          this.placeGlobal(x + dx, y + dy, z + dz, edge ? BlockType.Planks : BlockType.Air, true);
+        }
+      }
+    }
+
+    this.placeGlobal(x - 3, y, z + 2, BlockType.Chest, true);
+    this.placeGlobal(x + 4, y + 1, z - 1, BlockType.Torch, true);
+    this.placeGlobal(x + 12, y + 1, z + 12, BlockType.Chest, true);
+  }
+
+  private placeMineshaftCorridor(
+    centerX: number,
+    centerY: number,
+    centerZ: number,
+    axis: "x" | "z",
+    min: number,
+    max: number
+  ): void {
+    for (let offset = min; offset <= max; offset += 1) {
+      for (let side = -1; side <= 1; side += 1) {
+        for (let dy = 0; dy <= 2; dy += 1) {
+          const x = axis === "x" ? centerX + offset : centerX + side;
+          const z = axis === "x" ? centerZ + side : centerZ + offset;
+          this.placeGlobal(x, centerY + dy, z, BlockType.Air, true);
+          this.placeGlobal(x, centerY - 1, z, BlockType.Planks, true);
         }
       }
 
       if (offset % 4 === 0) {
-        this.placeGlobal(x + offset, y, z - 1, BlockType.Log, true);
-        this.placeGlobal(x + offset, y + 1, z - 1, BlockType.Log, true);
-        this.placeGlobal(x + offset, y, z + 1, BlockType.Log, true);
-        this.placeGlobal(x + offset, y + 1, z + 1, BlockType.Log, true);
-        this.placeGlobal(x + offset, y + 2, z, BlockType.Planks, true);
+        const leftX = axis === "x" ? centerX + offset : centerX - 1;
+        const rightX = axis === "x" ? centerX + offset : centerX + 1;
+        const leftZ = axis === "x" ? centerZ - 1 : centerZ + offset;
+        const rightZ = axis === "x" ? centerZ + 1 : centerZ + offset;
+        this.placeGlobal(leftX, centerY, leftZ, BlockType.Log, true);
+        this.placeGlobal(leftX, centerY + 1, leftZ, BlockType.Log, true);
+        this.placeGlobal(rightX, centerY, rightZ, BlockType.Log, true);
+        this.placeGlobal(rightX, centerY + 1, rightZ, BlockType.Log, true);
+        this.placeGlobal(centerX + (axis === "x" ? offset : 0), centerY + 2, centerZ + (axis === "z" ? offset : 0), BlockType.Planks, true);
+      }
+
+      if (offset % 9 === 0) {
+        const tx = axis === "x" ? centerX + offset : centerX;
+        const tz = axis === "x" ? centerZ : centerZ + offset;
+        this.placeGlobal(tx, centerY + 1, tz, BlockType.Torch, true);
       }
     }
-
-    this.placeGlobal(x - 4, y, z, BlockType.Chest, true);
-    this.placeGlobal(x + 4, y + 1, z - 1, BlockType.Torch, true);
   }
 
   private placeDungeon(x: number, y: number, z: number): void {

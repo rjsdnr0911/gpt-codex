@@ -49,7 +49,7 @@ export class Player {
     this.pitch = clamp(this.pitch, -Math.PI / 2 + 0.03, Math.PI / 2 - 0.03);
   }
 
-  update(delta: number, input: InputController, world: World, canSprint = true, sneaking = false): void {
+  update(delta: number, input: InputController, world: World, canSprint = true, sneaking = false, creative = false): void {
     const forward = new THREE.Vector3(-Math.sin(this.yaw), 0, -Math.cos(this.yaw));
     const right = new THREE.Vector3(Math.cos(this.yaw), 0, -Math.sin(this.yaw));
     const wish = new THREE.Vector3();
@@ -74,8 +74,21 @@ export class Player {
       wish.normalize();
     }
 
-    const inWater = this.isInWater(world);
     const wantsSprint = input.isDown("ControlLeft") || input.isDown("ControlRight") || input.isDown("KeyR");
+    const inWater = this.isInWater(world);
+
+    if (creative) {
+      const speed = wantsSprint ? 9.2 : 6.2;
+      this.velocity.x = wish.x * speed;
+      this.velocity.z = wish.z * speed;
+      this.velocity.y = input.isDown("Space") ? 5.6 : sneaking ? -5.6 : 0;
+      this.moveWithCollision(delta, world);
+      this.grounded = true;
+      this.lastLandingSpeed = 0;
+      this.syncCamera();
+      return;
+    }
+
     const speed = wantsSprint && canSprint && !inWater ? 7.1 : sneaking ? 2.1 : 4.6;
     this.velocity.x = wish.x * (inWater ? speed * 0.48 : speed);
     this.velocity.z = wish.z * (inWater ? speed * 0.48 : speed);
@@ -95,6 +108,17 @@ export class Player {
       }
     }
 
+    this.moveWithCollision(delta, world);
+
+    if (this.position.y < -12 || this.position.y > WORLD_HEIGHT + 18) {
+      this.position.copy(world.findSpawn());
+      this.velocity.set(0, 0, 0);
+    }
+
+    this.syncCamera();
+  }
+
+  private moveWithCollision(delta: number, world: World): void {
     const next = this.position.clone();
     next.x += this.velocity.x * delta;
 
@@ -125,13 +149,6 @@ export class Player {
     }
 
     this.position.copy(next);
-
-    if (this.position.y < -12 || this.position.y > WORLD_HEIGHT + 18) {
-      this.position.copy(world.findSpawn());
-      this.velocity.set(0, 0, 0);
-    }
-
-    this.syncCamera();
   }
 
   collidesAt(position: THREE.Vector3, world: World): boolean {
