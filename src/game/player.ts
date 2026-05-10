@@ -42,8 +42,8 @@ export class Player {
     };
   }
 
-  applyLook(movementX: number, movementY: number): void {
-    const sensitivity = 0.0022;
+  applyLook(movementX: number, movementY: number, sensitivityMultiplier = 1): void {
+    const sensitivity = 0.0022 * sensitivityMultiplier;
     this.yaw -= movementX * sensitivity;
     this.pitch -= movementY * sensitivity;
     this.pitch = clamp(this.pitch, -Math.PI / 2 + 0.03, Math.PI / 2 - 0.03);

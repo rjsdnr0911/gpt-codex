@@ -16,9 +16,11 @@ import {
 } from "../game/quests";
 import { SmeltingRecipe } from "../game/smelting";
 import { SurvivalState } from "../game/survival";
+import { DEFAULT_SETTINGS, GameSettings, GraphicsQuality } from "../game/settings";
 
 export type HudMode =
   | "title"
+  | "options"
   | "worldSelect"
   | "createWorld"
   | "loading"
@@ -45,6 +47,9 @@ export interface RecipeView {
 export interface HudCallbacks {
   onSingleplayer: () => void;
   onCreateWorldMenu: () => void;
+  onOptions: (target: "title" | "paused") => void;
+  onOptionsBack: (target: "title" | "paused") => void;
+  onSettingsChange: (settings: Partial<GameSettings>) => void;
   onCreateWorld: (name: string, seed: string) => void;
   onSelectWorld: (id: string) => void;
   onDeleteWorld: (id: string) => void;
@@ -85,6 +90,7 @@ export interface HudStats {
   dimension: DimensionId;
   smeltingRecipes: Array<{ recipe: SmeltingRecipe; smeltable: boolean }>;
   boss: EndBossStats | null;
+  settings: GameSettings;
 }
 
 export class Hud {
@@ -116,6 +122,7 @@ export class Hud {
   private catalogQuery = "";
   private catalogPage = 0;
   private catalogSelectedItem: ItemId | null = null;
+  private optionsReturnMode: "title" | "paused" = "title";
 
   constructor(parent: HTMLElement, callbacks: HudCallbacks) {
     this.callbacks = callbacks;
@@ -255,6 +262,7 @@ export class Hud {
 
     const selected = this.stats.selectedStack;
     this.statusLine.textContent = this.stats.position;
+    this.debugChip.hidden = !this.stats.settings.showDebug;
     this.debugChip.innerHTML = "";
     this.debugChip.append(
       this.makeMetric("월드", this.stats.activeWorldName),
@@ -298,6 +306,11 @@ export class Hud {
 
   private renderQuestTracker(): void {
     if (!this.stats || this.mode !== "playing") {
+      this.questTracker.hidden = true;
+      return;
+    }
+
+    if (!this.stats.settings.showQuestTracker) {
       this.questTracker.hidden = true;
       return;
     }
@@ -352,6 +365,11 @@ export class Hud {
       return;
     }
 
+    if (this.mode === "options") {
+      this.menuLayer.append(this.makeOptionsMenu());
+      return;
+    }
+
     if (this.mode === "worldSelect") {
       this.menuLayer.append(this.makeWorldSelect());
       return;
@@ -392,13 +410,104 @@ export class Hud {
   }
 
   private makeTitleMenu(): HTMLElement {
-    const actions = [
-      this.makeMenuButton("싱글플레이", this.callbacks.onSingleplayer),
+    const panel = document.createElement("div");
+    panel.className = "title-menu";
+
+    const brand = document.createElement("section");
+    brand.className = "title-brand";
+
+    const badge = document.createElement("div");
+    badge.className = "title-badge";
+    badge.textContent = "로컬 싱글플레이 생존";
+
+    const title = document.createElement("h1");
+    title.className = "title-logo";
+    title.textContent = "Codex Craft";
+
+    const copy = document.createElement("p");
+    copy.className = "title-copy";
+    copy.textContent = "나무에서 드래곤까지 이어지는 한국어 복셀 생존 샌드박스.";
+
+    const features = document.createElement("div");
+    features.className = "title-feature-grid";
+    for (const [label, value] of [
+      ["진행", "퀘스트 기반"],
+      ["월드", "동굴·지옥·엔드"],
+      ["전투", "몹·장비·드래곤"]
+    ]) {
+      const item = document.createElement("div");
+      const strong = document.createElement("strong");
+      strong.textContent = value;
+      const span = document.createElement("span");
+      span.textContent = label;
+      item.append(strong, span);
+      features.append(item);
+    }
+
+    brand.append(badge, title, copy, features);
+
+    const actions = document.createElement("nav");
+    actions.className = "title-actions";
+    actions.append(
+      this.makeMenuButton("싱글플레이", this.callbacks.onSingleplayer, "primary"),
       this.makeMenuButton("새 월드 만들기", this.callbacks.onCreateWorldMenu),
-      this.makeMenuButton("설정", () => this.showToast("설정은 현재 생존 빌드에 통합되어 있습니다.")),
-      this.makeMenuButton("타이틀로 돌아가기", () => this.showToast("이 빌드는 로컬 싱글플레이 전용입니다."))
-    ];
-    return this.makeMenuPanel("Codex Craft", "블록을 캐고, 만들고, 밤을 버티는 로컬 생존 샌드박스.", actions, true);
+      this.makeMenuButton("설정", () => {
+        this.optionsReturnMode = "title";
+        this.callbacks.onOptions("title");
+      }),
+      this.makeMenuButton("로컬 빌드 정보", () => this.showToast("Codex Craft는 이 컴퓨터에 저장되는 싱글플레이 빌드입니다."))
+    );
+
+    const note = document.createElement("div");
+    note.className = "title-note";
+    note.textContent = "WASD 이동 · E 인벤토리 · 우클릭 상호작용 · Esc 메뉴";
+
+    panel.append(brand, actions, note);
+    return panel;
+  }
+
+  private makeOptionsMenu(): HTMLElement {
+    const settings = this.stats?.settings ?? DEFAULT_SETTINGS;
+    const panel = this.makeMenuPanel("설정", "조작감, 화면, HUD 표시를 조정합니다.", [], false);
+    panel.classList.add("options-panel");
+
+    const form = document.createElement("div");
+    form.className = "settings-grid";
+    form.append(
+      this.makeSliderSetting("마우스 감도", `${Math.round(settings.mouseSensitivity * 100)}%`, 0.25, 2.5, 0.05, settings.mouseSensitivity, (value) =>
+        this.callbacks.onSettingsChange({ mouseSensitivity: value })
+      ),
+      this.makeSliderSetting("시야각", `${settings.fov}°`, 60, 95, 1, settings.fov, (value) =>
+        this.callbacks.onSettingsChange({ fov: Math.round(value) })
+      ),
+      this.makeSliderSetting("렌더 거리", `${settings.renderDistance} 청크`, 2, 5, 1, settings.renderDistance, (value) =>
+        this.callbacks.onSettingsChange({ renderDistance: Math.round(value) })
+      ),
+      this.makeSelectSetting("그래픽 품질", settings.graphicsQuality, [
+        ["quality", "고품질"],
+        ["balanced", "균형"],
+        ["performance", "성능"]
+      ], (value) => this.callbacks.onSettingsChange({ graphicsQuality: value })),
+      this.makeToggleSetting("퀘스트 목표 표시", settings.showQuestTracker, (value) =>
+        this.callbacks.onSettingsChange({ showQuestTracker: value })
+      ),
+      this.makeToggleSetting("좌표/FPS 표시", settings.showDebug, (value) =>
+        this.callbacks.onSettingsChange({ showDebug: value })
+      ),
+      this.makeSliderSetting("사운드 볼륨", `${Math.round(settings.soundVolume * 100)}%`, 0, 1, 0.05, settings.soundVolume, (value) =>
+        this.callbacks.onSettingsChange({ soundVolume: value })
+      )
+    );
+
+    const actions = document.createElement("div");
+    actions.className = "menu-actions";
+    actions.append(
+      this.makeMenuButton("기본값으로 복원", () => this.callbacks.onSettingsChange(DEFAULT_SETTINGS)),
+      this.makeMenuButton("뒤로", () => this.callbacks.onOptionsBack(this.optionsReturnMode))
+    );
+
+    panel.append(form, actions);
+    return panel;
   }
 
   private makeWorldSelect(): HTMLElement {
@@ -490,6 +599,10 @@ export class Hud {
   private makePauseMenu(): HTMLElement {
     return this.makeMenuPanel("게임 메뉴", "월드가 일시정지되었습니다.", [
       this.makeMenuButton("게임으로 돌아가기", this.callbacks.onResume),
+      this.makeMenuButton("설정", () => {
+        this.optionsReturnMode = "paused";
+        this.callbacks.onOptions("paused");
+      }),
       this.makeMenuButton("저장하고 타이틀로", this.callbacks.onQuitToTitle),
       this.makeMenuButton("모든 로컬 월드 초기화", this.callbacks.onResetAll, "danger")
     ]);
@@ -1415,6 +1528,96 @@ export class Hud {
     return button;
   }
 
+  private makeSliderSetting(
+    labelText: string,
+    valueText: string,
+    min: number,
+    max: number,
+    step: number,
+    value: number,
+    onChange: (value: number) => void
+  ): HTMLElement {
+    const row = document.createElement("label");
+    row.className = "setting-row";
+    const text = document.createElement("span");
+    text.textContent = labelText;
+    const valueLabel = document.createElement("strong");
+    valueLabel.textContent = valueText;
+    const input = document.createElement("input");
+    input.type = "range";
+    input.min = String(min);
+    input.max = String(max);
+    input.step = String(step);
+    input.value = String(value);
+    input.addEventListener("input", () => {
+      const next = Number(input.value);
+      valueLabel.textContent = this.formatSettingValue(labelText, next);
+      onChange(next);
+    });
+    row.append(text, valueLabel, input);
+    return row;
+  }
+
+  private makeSelectSetting(
+    labelText: string,
+    value: GraphicsQuality,
+    options: Array<[GraphicsQuality, string]>,
+    onChange: (value: GraphicsQuality) => void
+  ): HTMLElement {
+    const row = document.createElement("label");
+    row.className = "setting-row";
+    const text = document.createElement("span");
+    text.textContent = labelText;
+    const valueLabel = document.createElement("strong");
+    valueLabel.textContent = options.find(([option]) => option === value)?.[1] ?? value;
+    const select = document.createElement("select");
+    select.className = "pixel-select";
+    for (const [optionValue, optionLabel] of options) {
+      const option = document.createElement("option");
+      option.value = optionValue;
+      option.textContent = optionLabel;
+      option.selected = optionValue === value;
+      select.append(option);
+    }
+    select.addEventListener("change", () => {
+      valueLabel.textContent = options.find(([option]) => option === select.value)?.[1] ?? select.value;
+      onChange(select.value as GraphicsQuality);
+    });
+    row.append(text, valueLabel, select);
+    return row;
+  }
+
+  private makeToggleSetting(labelText: string, value: boolean, onChange: (value: boolean) => void): HTMLElement {
+    const row = document.createElement("label");
+    row.className = "setting-row toggle";
+    const text = document.createElement("span");
+    text.textContent = labelText;
+    const valueLabel = document.createElement("strong");
+    valueLabel.textContent = value ? "켜짐" : "꺼짐";
+    const input = document.createElement("input");
+    input.type = "checkbox";
+    input.checked = value;
+    input.addEventListener("change", () => {
+      valueLabel.textContent = input.checked ? "켜짐" : "꺼짐";
+      onChange(input.checked);
+    });
+    row.append(text, valueLabel, input);
+    return row;
+  }
+
+  private formatSettingValue(labelText: string, value: number): string {
+    if (labelText.includes("감도") || labelText.includes("볼륨")) {
+      return `${Math.round(value * 100)}%`;
+    }
+    if (labelText.includes("시야각")) {
+      return `${Math.round(value)}°`;
+    }
+    if (labelText.includes("렌더")) {
+      return `${Math.round(value)} 청크`;
+    }
+    return String(value);
+  }
+
   private makeMetric(labelText: string, valueText: string): HTMLDivElement {
     const row = document.createElement("div");
     row.className = "meter-row";
@@ -1455,10 +1658,11 @@ export class Hud {
       .map((entry) => `${entry.recipe.id}:${entry.smeltable ? 1 : 0}`)
       .join("|");
     const boss = stats.boss ? `${stats.boss.health}:${stats.boss.crystals}:${stats.boss.phaseKo}` : "-";
+    const settings = `${stats.settings.mouseSensitivity}:${stats.settings.fov}:${stats.settings.renderDistance}:${stats.settings.graphicsQuality}:${stats.settings.showQuestTracker}:${stats.settings.showDebug}:${stats.settings.soundVolume}`;
     const quests = `${stats.dimension}|${stats.questState.activeMainQuestId ?? "-"}|${stats.questState.trackedSideQuestIds.join(",")}|${stats.questState.completed.join(",")}|${Object.entries(stats.questState.progress)
       .map(([key, value]) => `${key}:${value}`)
       .join(",")}`;
-    return `${this.mode}|${slots}|${armor}|${offhand}|${cursor}|${crafting}|${result}|${recipes}|${smelting}|${boss}|${quests}`;
+    return `${this.mode}|${slots}|${armor}|${offhand}|${cursor}|${crafting}|${result}|${recipes}|${smelting}|${boss}|${settings}|${quests}`;
   }
 
   private numberFromEvent(event: MouseEvent): number | null {

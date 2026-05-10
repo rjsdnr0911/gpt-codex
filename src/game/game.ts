@@ -59,6 +59,7 @@ import { SkySystem } from "./sky";
 import { createVoxelMaterials, VoxelMaterials } from "./textureAtlas";
 import { WORLDGEN_VERSION, World } from "./world";
 import { Hud, HudMode, RecipeView, WorldSummary } from "../ui/hud";
+import { GameSettings, loadGameSettings, normalizeGameSettings, saveGameSettings } from "./settings";
 
 interface VoxelHit {
   x: number;
@@ -126,6 +127,8 @@ export class Game {
   private mode: HudMode = "title";
   private saveIndex: SaveIndexV2 = { version: 4, activeWorldId: null, worlds: [] };
   private activeWorld: WorldSaveV2 | null = null;
+  private settings: GameSettings = loadGameSettings();
+  private optionsReturnMode: "title" | "paused" = "title";
   private inventory: InventoryState = createInventoryState();
   private craftingGrid: Array<ItemStack | null> = Array.from({ length: 9 }, () => null);
   private craftingGridSize: 2 | 3 = 2;
@@ -182,6 +185,12 @@ export class Game {
     this.hud = new Hud(this.shell, {
       onSingleplayer: () => this.showWorldSelect(),
       onCreateWorldMenu: () => this.setMode("createWorld"),
+      onOptions: (target) => {
+        this.optionsReturnMode = target;
+        this.setMode("options");
+      },
+      onOptionsBack: (target) => this.setMode(target),
+      onSettingsChange: (settings) => this.updateSettings(settings),
       onCreateWorld: (name, seed) => {
         void this.createWorld(name, seed);
       },
@@ -217,6 +226,7 @@ export class Game {
     const maxAnisotropy = this.renderer.capabilities.getMaxAnisotropy();
     this.materials = createVoxelMaterials(maxAnisotropy);
     this.setupEnvironment();
+    this.applySettings();
     this.scene.add(this.mobs.group);
     this.scene.add(this.endBoss.group);
     this.setupHighlight();
@@ -307,7 +317,7 @@ export class Game {
     this.survival = new SurvivalController(createSurvivalState(spawn));
     this.questState = createQuestState();
     this.portalTimer = 0;
-    this.world.ensureChunksAround(this.player.position);
+    this.world.ensureChunksAround(this.player.position, this.settings.renderDistance);
   }
 
   private loadWorld(save: WorldSaveV2, startPlaying: boolean): void {
@@ -328,7 +338,7 @@ export class Game {
     this.syncEndBoss();
     this.portalTimer = 0;
     this.mobs.restore(this.dimensionEntities[this.dimension] ?? save.entities ?? []);
-    this.world.ensureChunksAround(this.player.position);
+    this.world.ensureChunksAround(this.player.position, this.settings.renderDistance);
     this.saveState = "준비됨";
     this.hud.setWorlds(this.worldSummaries());
     if (startPlaying) {
@@ -382,6 +392,39 @@ export class Game {
       return;
     }
     this.endBoss.setWorld(this.world, this.questState.completed.includes("road_defeat_dragon"));
+  }
+
+  private updateSettings(patch: Partial<GameSettings>): void {
+    this.settings = normalizeGameSettings({ ...this.settings, ...patch });
+    saveGameSettings(this.settings);
+    this.applySettings();
+    this.updateHud();
+  }
+
+  private applySettings(): void {
+    if (!this.renderer) {
+      return;
+    }
+
+    const pixelRatio =
+      this.settings.graphicsQuality === "quality"
+        ? Math.min(window.devicePixelRatio || 1, 1.75)
+        : this.settings.graphicsQuality === "balanced"
+          ? Math.min(window.devicePixelRatio || 1, 1.35)
+          : 1;
+    this.renderer.setPixelRatio(pixelRatio);
+    this.renderer.shadowMap.enabled = this.settings.graphicsQuality !== "performance";
+
+    this.camera.fov = this.settings.fov;
+    this.camera.updateProjectionMatrix();
+
+    if (this.sunLight) {
+      this.sunLight.castShadow = this.settings.graphicsQuality !== "performance";
+      this.sunLight.shadow.mapSize.width = this.settings.graphicsQuality === "quality" ? 2048 : 1024;
+      this.sunLight.shadow.mapSize.height = this.settings.graphicsQuality === "quality" ? 2048 : 1024;
+    }
+
+    this.resize();
   }
 
   private async createWorld(name: string, seed: string): Promise<void> {
@@ -637,6 +680,8 @@ export class Game {
         this.closeOpenContainer(false);
       } else if (this.mode === "paused") {
         this.resumeGame();
+      } else if (this.mode === "options") {
+        this.setMode(this.optionsReturnMode);
       } else if (this.mode === "worldSelect" || this.mode === "createWorld") {
         this.setMode("title");
       }
@@ -678,7 +723,7 @@ export class Game {
 
   private updatePlaying(delta: number): void {
     const look = this.input.consumeLook();
-    this.player.applyLook(look.movementX, look.movementY);
+    this.player.applyLook(look.movementX, look.movementY, this.settings.mouseSensitivity);
 
     const moving =
       this.input.isDown("KeyW") ||
@@ -694,7 +739,7 @@ export class Game {
       this.survival.damage(Math.ceil((this.player.lastLandingSpeed - 12) * 0.8));
     }
 
-    this.world.ensureChunksAround(this.player.position);
+    this.world.ensureChunksAround(this.player.position, this.settings.renderDistance);
     this.selectedHit = this.raycastBlock();
     if (this.selectedHit?.block === BlockType.Lava) {
       this.recordQuestEvent({ type: "discover", target: "lava" });
@@ -2093,7 +2138,7 @@ export class Game {
       this.player.pitch = target === "nether" ? -0.02 : target === "end" ? -0.16 : -0.08;
     }
 
-    this.world.ensureChunksAround(this.player.position);
+    this.world.ensureChunksAround(this.player.position, this.settings.renderDistance);
     this.mobs.restore(this.dimensionEntities[target] ?? []);
     this.syncEndBoss();
 
@@ -2273,7 +2318,8 @@ export class Game {
       smeltingRecipes: SMELTING_RECIPES.map((recipe) => ({
         recipe,
         smeltable: canSmelt(recipe, this.inventory)
-      }))
+      })),
+      settings: this.settings
     });
   }
 
