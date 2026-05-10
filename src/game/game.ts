@@ -20,19 +20,24 @@ import { blockFromItem, EquipmentSlot, ITEM_DEFINITIONS, ItemId, ItemStack, maxS
 import { clamp, hash3 } from "./math";
 import { MobManager } from "./mobs";
 import { Player } from "./player";
+import { AudioSystem } from "./audioSystem";
 import { applyFluidInteractions } from "./fluids";
 import { buildEndExitPortal, EndBossController } from "./endBoss";
 import { insertEyeAndTryActivate, isInEndPortal } from "./endPortal";
 import { isInPortal, tryIgnitePortal } from "./portal";
 import {
+  addRecipeLayoutToGrid,
+  canAddRecipeLayoutToGrid,
   canCraft,
   consumeRecipeGrid,
   matchRecipeFromGrid,
   RECIPES,
+  recipeGridMatches,
   recipeIngredients,
   recipeIsUnlocked,
   recipeLayout
 } from "./recipes";
+import { ParticleSystem } from "./particles";
 import {
   applyQuestEvent,
   createQuestState,
@@ -109,6 +114,8 @@ export class Game {
   private heldLight!: THREE.PointLight;
   private highlight!: THREE.LineSegments;
   private handView!: HandView;
+  private readonly audio = new AudioSystem((import.meta as unknown as { env?: { BASE_URL?: string } }).env?.BASE_URL ?? "/");
+  private readonly particles = new ParticleSystem();
   private mobs = new MobManager();
   private readonly endBoss = new EndBossController();
   private readonly torchLights: THREE.PointLight[] = [];
@@ -146,6 +153,9 @@ export class Game {
   private mining: MiningState | null = null;
   private selectedItemTimer = 0;
   private attackCooldown = 0;
+  private footstepTimer = 0;
+  private miningSoundTimer = 0;
+  private settingsFeedbackTimer: number | null = null;
 
   constructor(root: HTMLElement) {
     this.root = root;
@@ -190,6 +200,13 @@ export class Game {
         this.setMode("options");
       },
       onOptionsBack: (target) => this.setMode(target),
+      onUiAction: (action) => {
+        this.audio.unlock();
+        this.audio.playSfx(action === "hover" ? "ui_select" : "ui_click", {
+          volume: action === "hover" ? 0.22 : 0.42,
+          throttleMs: action === "hover" ? 70 : 0
+        });
+      },
       onSettingsChange: (settings) => this.updateSettings(settings),
       onCreateWorld: (name, seed) => {
         void this.createWorld(name, seed);
@@ -229,6 +246,7 @@ export class Game {
     this.applySettings();
     this.scene.add(this.mobs.group);
     this.scene.add(this.endBoss.group);
+    this.scene.add(this.particles.group);
     this.setupHighlight();
     this.scene.add(this.camera);
     this.handView = new HandView(this.camera);
@@ -399,12 +417,22 @@ export class Game {
     saveGameSettings(this.settings);
     this.applySettings();
     this.updateHud();
+    if (this.settingsFeedbackTimer !== null) {
+      window.clearTimeout(this.settingsFeedbackTimer);
+    }
+    this.settingsFeedbackTimer = window.setTimeout(() => {
+      this.settingsFeedbackTimer = null;
+      this.audio.playSfx("ui_confirm", { volume: 0.36, throttleMs: 600 });
+      this.hud.showToast("설정 저장됨");
+    }, 360);
   }
 
   private applySettings(): void {
     if (!this.renderer) {
       return;
     }
+
+    this.audio.setVolume(this.settings.soundVolume);
 
     const pixelRatio =
       this.settings.graphicsQuality === "quality"
@@ -644,6 +672,7 @@ export class Game {
     this.selectedItemTimer = Math.max(0, this.selectedItemTimer - delta);
     this.attackCooldown = Math.max(0, this.attackCooldown - delta);
     this.endPortalHintCooldown = Math.max(0, this.endPortalHintCooldown - delta);
+    this.miningSoundTimer = Math.max(0, this.miningSoundTimer - delta);
 
     this.handleKeyboard();
 
@@ -657,6 +686,8 @@ export class Game {
 
     this.updateEnvironment(delta);
     this.updateEyeMarkers(delta);
+    this.particles.update(delta, this.player?.position);
+    this.updateAudioState();
     this.handView.update(
       delta,
       selectedStack(this.inventory),
@@ -736,8 +767,9 @@ export class Game {
 
     this.player.update(delta, this.input, this.world, this.survival.canSprint(), sneaking);
     if (this.player.lastLandingSpeed > 13) {
-      this.survival.damage(Math.ceil((this.player.lastLandingSpeed - 12) * 0.8));
+      this.damagePlayer(Math.ceil((this.player.lastLandingSpeed - 12) * 0.8), false);
     }
+    this.updateFootsteps(delta, moving, wantsSprint && this.survival.canSprint(), sneaking);
 
     this.world.ensureChunksAround(this.player.position, this.settings.renderDistance);
     this.selectedHit = this.raycastBlock();
@@ -773,7 +805,7 @@ export class Game {
     }
 
     for (const drop of mobEvents.drops) {
-      addStack(this.inventory, drop);
+      this.addStackWithFeedback(drop, this.player.position);
     }
 
     for (const explosion of mobEvents.explosions) {
@@ -800,19 +832,93 @@ export class Game {
     }
   }
 
-  private damagePlayer(amount: number, blocking: boolean): number {
-    return this.survival.damage(amount, {
+  private updateAudioState(): void {
+    if (this.mode === "playing" && this.dimension === "end" && this.endBoss.stats) {
+      this.audio.playMusic("dragon");
+    } else {
+      this.audio.stopMusic();
+    }
+  }
+
+  private updateFootsteps(delta: number, moving: boolean, sprinting: boolean, sneaking: boolean): void {
+    this.footstepTimer = Math.max(0, this.footstepTimer - delta);
+    const speed = Math.hypot(this.player.velocity.x, this.player.velocity.z);
+    if (!moving || !this.player.grounded || speed < 0.45 || this.player.isInWater(this.world)) {
+      return;
+    }
+
+    if (this.footstepTimer > 0) {
+      return;
+    }
+
+    const ground = this.world.getBlock(
+      Math.floor(this.player.position.x),
+      Math.floor(this.player.position.y - 0.12),
+      Math.floor(this.player.position.z)
+    );
+    const stoneLike =
+      ground === BlockType.Stone ||
+      ground === BlockType.Gravel ||
+      ground === BlockType.Obsidian ||
+      ground === BlockType.Netherrack ||
+      ground === BlockType.NetherBrick;
+    this.audio.playSfx("footstep", {
+      volume: stoneLike ? 0.3 : 0.24,
+      pitch: stoneLike ? 0.88 + Math.random() * 0.08 : 0.98 + Math.random() * 0.12,
+      throttleMs: 110
+    });
+    this.footstepTimer = sprinting ? 0.28 : sneaking ? 0.58 : 0.4;
+  }
+
+  private damagePlayer(amount: number, blocking: boolean, source?: THREE.Vector3): number {
+    const dealt = this.survival.damage(amount, {
       armorSlots: this.inventory.armorSlots,
       blocking: blocking && this.inventory.offhand?.item === "shield"
     });
+    if (dealt > 0) {
+      this.audio.playSfx(blocking ? "metal" : "player_hurt", { volume: blocking ? 0.42 : 0.54, throttleMs: 120 });
+      this.hud.showDamageIndicator(this.damageDirection(source));
+    }
+    return dealt;
+  }
+
+  private damageDirection(source?: THREE.Vector3): "front" | "back" | "left" | "right" {
+    if (!source) {
+      return "front";
+    }
+
+    const toSource = source.clone().sub(this.player.position);
+    toSource.y = 0;
+    if (toSource.lengthSq() < 0.0001) {
+      return "front";
+    }
+    toSource.normalize();
+
+    const forward = this.player.getViewDirection();
+    forward.y = 0;
+    if (forward.lengthSq() < 0.0001) {
+      return "front";
+    }
+    forward.normalize();
+
+    const right = new THREE.Vector3(forward.z, 0, -forward.x);
+    const forwardDot = forward.dot(toSource);
+    const sideDot = right.dot(toSource);
+    if (Math.abs(sideDot) > Math.abs(forwardDot)) {
+      return sideDot > 0 ? "right" : "left";
+    }
+    return forwardDot > 0 ? "front" : "back";
   }
 
   private handleExplosion(x: number, y: number, z: number, radius: number, maxDamage: number, sourceLabel = "폭발"): void {
+    const origin = new THREE.Vector3(x, y, z);
+    this.audio.playSfx("explosion", { volume: sourceLabel === "엔드 수정" ? 0.8 : 0.68, throttleMs: 80 });
+    this.particles.spawnMagicBurst(origin, sourceLabel === "엔드 수정" ? "#d8a9ff" : "#e8b56f", sourceLabel === "엔드 수정" ? 42 : 30);
     const playerDistance = this.player.position.distanceTo(new THREE.Vector3(x, y, z));
     if (playerDistance < radius + 2.2) {
       const exposure = clamp(1 - playerDistance / (radius + 2.2), 0, 1);
-      this.damagePlayer(Math.ceil(maxDamage * exposure), false);
-      const knock = this.player.position.clone().sub(new THREE.Vector3(x, y, z)).normalize().multiplyScalar(6 * exposure);
+      this.damagePlayer(Math.ceil(maxDamage * exposure), false, origin);
+      const knock = this.player.position.clone().sub(origin).normalize().multiplyScalar(6 * exposure);
       this.player.velocity.add(knock);
       this.player.velocity.y += 4 * exposure;
     }
@@ -848,9 +954,12 @@ export class Game {
 
           if (this.world.setBlock(bx, by, bz, BlockType.Air)) {
             destroyed += 1;
+            if (destroyed <= 24) {
+              this.particles.spawnBlockBreak(new THREE.Vector3(bx + 0.5, by + 0.5, bz + 0.5), definition.swatch, 5);
+            }
             const drop = definition.drops as ItemId | null;
             if (drop && hash3(this.world.seedInt ^ 0xd20d, bx, by, bz) < 0.32) {
-              addStack(this.inventory, { item: drop, count: 1 });
+              this.addStackWithFeedback({ item: drop, count: 1 }, new THREE.Vector3(bx + 0.5, by + 0.5, bz + 0.5), false);
             }
           }
         }
@@ -882,10 +991,13 @@ export class Game {
         this.attackCooldown = heldDefinition.combat?.cooldown ?? 0.9;
         this.damageHeldTool();
         this.survival.addExhaustion(0.04);
+        this.audio.playSfx("bow", { volume: 0.36, pitch: 1.08 });
         if (hit) {
+          this.audio.playSfx(hit.killed ? "mob_death" : "mob_hurt", { volume: hit.killed ? 0.42 : 0.34 });
+          this.particles.spawnMagicBurst(this.combatHitPosition(9), hit.hostile ? "#d85252" : "#f0d3b1", hit.killed ? 14 : 8);
           if (hit.killed) {
             for (const drop of hit.drops) {
-              addStack(this.inventory, drop);
+              this.addStackWithFeedback(drop, this.combatHitPosition(5));
             }
             this.recordQuestEvent({ type: "mob_killed", target: hit.name });
             this.unlockRecipesFromInventory();
@@ -917,9 +1029,11 @@ export class Game {
         this.attackCooldown = this.attackDelay();
         this.damageHeldTool();
         this.survival.addExhaustion(0.08);
+        this.audio.playSfx(hit.killed ? "mob_death" : "mob_hurt", { volume: hit.killed ? 0.44 : 0.36 });
+        this.particles.spawnMagicBurst(this.combatHitPosition(this.attackRange()), hit.hostile ? "#d85252" : "#f0d3b1", hit.killed ? 16 : 9);
         if (hit.killed) {
           for (const drop of hit.drops) {
-            addStack(this.inventory, drop);
+            this.addStackWithFeedback(drop, this.combatHitPosition(3.4));
           }
           this.recordQuestEvent({ type: "mob_killed", target: hit.name });
           this.unlockRecipesFromInventory();
@@ -949,6 +1063,7 @@ export class Game {
 
     if (!actions.primaryHeld || !this.selectedHit) {
       this.mining = null;
+      this.miningSoundTimer = 0;
       return;
     }
 
@@ -965,6 +1080,10 @@ export class Game {
 
     const breakTime = this.breakTime(hit.block);
     this.mining.progress += delta / breakTime;
+    if (this.miningSoundTimer <= 0) {
+      this.audio.playSfx("block_hit", { volume: 0.14, pitch: 0.82 + Math.random() * 0.18, throttleMs: 90 });
+      this.miningSoundTimer = 0.18;
+    }
 
     if (this.mining.progress >= 1) {
       this.breakBlock(hit);
@@ -985,6 +1104,7 @@ export class Game {
       if (document.pointerLockElement) {
         void document.exitPointerLock();
       }
+      this.audio.playSfx("ui_open", { volume: 0.34 });
       this.openCraftingPanel("craftingTable");
       return;
     }
@@ -993,11 +1113,13 @@ export class Game {
       if (document.pointerLockElement) {
         void document.exitPointerLock();
       }
+      this.audio.playSfx("ui_open", { volume: 0.34 });
       this.openCraftingPanel("furnace");
       return;
     }
 
     if (this.selectedHit && interactable === "chest" && !sneaking) {
+      this.audio.playSfx("chest", { volume: 0.42 });
       this.openChest(this.selectedHit);
       return;
     }
@@ -1010,6 +1132,7 @@ export class Game {
     if (held && heldDef?.food && this.survival.state.hunger < 20) {
       this.survival.eat(heldDef.food.hunger, heldDef.food.saturation);
       this.consumeSelected(1);
+      this.audio.playSfx("eat", { volume: 0.28, pitch: 0.95 });
       this.queueSave();
       return;
     }
@@ -1055,6 +1178,8 @@ export class Game {
       const changed = this.world.setBlock(x, y, z, block);
       if (changed) {
         this.consumeSelected(1);
+        this.audio.playSfx("block_place", { volume: 0.32, pitch: 0.9 + Math.random() * 0.12 });
+        this.particles.spawnBlockPlace(new THREE.Vector3(x + 0.5, y + 0.5, z + 0.5), BLOCKS[block].swatch);
         const hardened = this.applyFluidAt(x, y, z);
         this.recordQuestEvent({ type: "block_placed", target: BLOCKS[block].id });
         if (hardened > 0) {
@@ -1081,8 +1206,11 @@ export class Game {
 
     if (result.activated) {
       this.recordQuestEvent({ type: "portal_ignited", target: "end_portal" });
+      this.audio.playSfx("portal", { volume: 0.72 });
+      this.particles.spawnMagicBurst(new THREE.Vector3(this.selectedHit.x + 0.5, this.selectedHit.y + 0.8, this.selectedHit.z + 0.5), "#80e2a6", 32);
       this.hud.showToast("엔드 포털이 활성화되었습니다");
     } else {
+      this.audio.playSfx("ui_confirm", { volume: 0.32 });
       this.hud.showToast("프레임에 엔더의 눈을 꽂았습니다");
     }
 
@@ -1209,6 +1337,7 @@ export class Game {
       const filled = this.selectedHit.block === BlockType.Water ? "water_bucket" : "lava_bucket";
       this.world.setBlock(this.selectedHit.x, this.selectedHit.y, this.selectedHit.z, BlockType.Air);
       this.setSelectedStack({ item: filled, count: 1 });
+      this.audio.playSfx("ui_confirm", { volume: 0.28 });
       this.applyFluidAt(this.selectedHit.x, this.selectedHit.y, this.selectedHit.z);
       if (filled === "lava_bucket") {
         this.recordQuestEvent({ type: "discover", target: "lava" });
@@ -1235,6 +1364,8 @@ export class Game {
     const block = held.item === "water_bucket" ? BlockType.Water : BlockType.Lava;
     if (this.world.setBlock(x, y, z, block)) {
       this.setSelectedStack({ item: "bucket", count: 1 });
+      this.audio.playSfx(block === BlockType.Lava ? "portal" : "block_place", { volume: block === BlockType.Lava ? 0.32 : 0.28 });
+      this.particles.spawnBlockPlace(new THREE.Vector3(x + 0.5, y + 0.5, z + 0.5), BLOCKS[block].swatch);
       const hardened = this.applyFluidAt(x, y, z);
       this.recordQuestEvent({ type: "block_placed", target: BLOCKS[block].id });
       if (hardened > 0) {
@@ -1262,6 +1393,8 @@ export class Game {
     if (portal.success) {
       this.damageHeldTool();
       this.recordQuestEvent({ type: "portal_ignited", target: "nether_portal" });
+      this.audio.playSfx("portal", { volume: 0.72 });
+      this.particles.spawnMagicBurst(new THREE.Vector3(x + 0.5, y + 1.4, z + 0.5), "#8d5cff", 42);
       this.hud.showToast("지옥문이 열렸습니다");
       this.queueSave();
       return true;
@@ -1271,6 +1404,8 @@ export class Game {
       this.world.setBlock(x, y, z, BlockType.Fire);
       this.damageHeldTool();
       this.recordQuestEvent({ type: "block_placed", target: "fire" });
+      this.audio.playSfx("portal", { volume: 0.22, pitch: 1.45 });
+      this.particles.spawnMagicBurst(new THREE.Vector3(x + 0.5, y + 0.5, z + 0.5), "#ff9c2e", 10);
       this.queueSave();
       return true;
     }
@@ -1319,6 +1454,10 @@ export class Game {
     return itemDefinition?.combat?.range ?? 4.4;
   }
 
+  private combatHitPosition(distance: number): THREE.Vector3 {
+    return this.player.getEyePosition().add(this.player.getViewDirection().multiplyScalar(distance));
+  }
+
   private handleDragonHit(hit: { hit: boolean; killed: boolean }, message: string): void {
     if (!hit.hit) {
       return;
@@ -1329,6 +1468,8 @@ export class Game {
       return;
     }
 
+    this.audio.playSfx("dragon_hit", { volume: 0.46, throttleMs: 120 });
+    this.particles.spawnMagicBurst(this.combatHitPosition(this.attackRange() + 2), "#d8a9ff", 18);
     this.hud.showToast(message);
     this.queueSave();
   }
@@ -1342,6 +1483,9 @@ export class Game {
     addStack(this.inventory, { item: "dragon_egg", count: 1 });
     this.recordQuestEvent({ type: "mob_killed", target: "엔더 드래곤" });
     this.syncEndBoss();
+    this.audio.playSfx("dragon_death", { volume: 0.9 });
+    this.audio.stopMusic();
+    this.particles.spawnMagicBurst(this.player.position.clone().add(new THREE.Vector3(0, 7, 0)), "#f0d3ff", 72);
     this.hud.showQuestToast("엔더 드래곤 처치", "귀환 포털이 열리고 드래곤 알을 얻었습니다", "엔딩 루프 완료");
     this.unlockRecipesFromInventory();
     this.queueSave();
@@ -1382,6 +1526,10 @@ export class Game {
       return;
     }
 
+    const blockCenter = new THREE.Vector3(hit.x + 0.5, hit.y + 0.5, hit.z + 0.5);
+    this.audio.playSfx("block_break", { volume: 0.36, pitch: 0.88 + Math.random() * 0.18 });
+    this.particles.spawnBlockBreak(blockCenter, definition.swatch);
+
     let drop = canDrop ? (definition.drops as ItemId | null) : null;
     let dropCount = 1;
 
@@ -1406,7 +1554,7 @@ export class Game {
     }
 
     if (drop) {
-      const remaining = addStack(this.inventory, { item: drop, count: dropCount });
+      const remaining = this.addStackWithFeedback({ item: drop, count: dropCount }, blockCenter);
       this.hud.showToast(remaining ? "인벤토리가 가득 찼습니다" : `${ITEM_DEFINITIONS[drop].name} 획득`);
     }
 
@@ -1685,26 +1833,56 @@ export class Game {
 
   private handleRecipeFill(recipeId: string, craftAll: boolean, gridSize: 2 | 3): void {
     const recipe = RECIPES.find((entry) => entry.id === recipeId);
-    if (!recipe || !canCraft(recipe, this.inventory, gridSize) || !this.returnCraftingGridToInventory()) {
+    if (!recipe) {
       return;
     }
 
-    this.craftingGridSize = gridSize;
     const layout = recipeLayout(recipe, gridSize);
     if (!layout) {
+      this.hud.showToast("이 제작칸에는 배치할 수 없습니다");
+      this.audio.playSfx("ui_error", { volume: 0.32 });
       return;
     }
 
-    const multiplier = craftAll ? this.maxCraftable(recipe) : 1;
-    for (let index = 0; index < layout.length; index += 1) {
-      const item = layout[index];
-      if (!item) {
-        continue;
+    const sameRecipe = this.craftingGridSize === gridSize && recipeGridMatches(recipe, this.activeCraftingGrid(), gridSize);
+    if (!sameRecipe) {
+      if (!this.returnCraftingGridToInventory()) {
+        this.hud.showToast("제작칸을 비울 인벤토리 공간이 부족합니다");
+        this.audio.playSfx("ui_error", { volume: 0.32 });
+        return;
       }
-      removeItems(this.inventory, item, multiplier);
-      this.craftingGrid[index] = { item, count: multiplier };
+      this.craftingGridSize = gridSize;
     }
 
+    let multiplier = craftAll ? this.maxCraftable(recipe) : 1;
+    if (multiplier <= 0 || !canCraft(recipe, this.inventory, gridSize)) {
+      this.hud.showToast("재료가 부족합니다");
+      this.audio.playSfx("ui_error", { volume: 0.32 });
+      return;
+    }
+
+    while (multiplier > 0 && !canAddRecipeLayoutToGrid(this.craftingGrid, recipe, gridSize, multiplier)) {
+      multiplier -= 1;
+    }
+
+    if (multiplier <= 0) {
+      this.hud.showToast("제작칸 수량 한도입니다");
+      this.audio.playSfx("ui_error", { volume: 0.32 });
+      return;
+    }
+
+    const ingredients = recipeIngredients(recipe);
+    for (const [item, count] of Object.entries(ingredients)) {
+      removeItems(this.inventory, item as ItemId, count * multiplier);
+    }
+
+    if (!addRecipeLayoutToGrid(this.craftingGrid, recipe, gridSize, multiplier)) {
+      this.hud.showToast("제작칸에 배치하지 못했습니다");
+      this.audio.playSfx("ui_error", { volume: 0.32 });
+      return;
+    }
+
+    this.audio.playSfx("ui_confirm", { volume: 0.28, throttleMs: 80 });
     this.queueSave();
   }
 
@@ -1769,6 +1947,19 @@ export class Game {
     }
 
     return false;
+  }
+
+  private addStackWithFeedback(stack: ItemStack, origin?: THREE.Vector3, playSound = true): ItemStack | null {
+    const leftover = addStack(this.inventory, { ...stack });
+    const accepted = stack.count - (leftover?.count ?? 0);
+    if (accepted > 0) {
+      const color = ITEM_DEFINITIONS[stack.item].color;
+      this.particles.spawnPickup(origin ?? this.player.position, color);
+      if (playSound) {
+        this.audio.playSfx("item_pickup", { volume: 0.32, throttleMs: 55 });
+      }
+    }
+    return leftover;
   }
 
   private clickExternalSlot(slots: Array<ItemStack | null>, index: number, button: 0 | 2): void {
@@ -1890,7 +2081,7 @@ export class Game {
       max = Math.min(max, Math.floor(total / count));
     }
 
-    return Math.max(1, Math.min(64, Number.isFinite(max) ? max : 1));
+    return Math.max(0, Math.min(64, Number.isFinite(max) ? max : 0));
   }
 
   private tierMeets(actual: ToolTier, required: ToolTier): boolean {
@@ -2083,6 +2274,7 @@ export class Game {
     const extra = completed.length > 1 ? ` 외 ${completed.length - 1}개` : "";
     const xpAmount = first.rewards.xp ?? (first.category === "main" ? 25 : 10);
     const rewardText = rewardItems.length > 0 ? `보상: ${rewardItems.join(", ")}` : `진행도 +${xpAmount}`;
+    this.audio.playSfx("ui_confirm", { volume: 0.52 });
     this.hud.showQuestToast(`퀘스트 완료: ${first.titleKo}${extra}`, first.rewards.toastKo, rewardText);
     this.unlockRecipesFromInventory();
     this.queueSave();
@@ -2119,6 +2311,7 @@ export class Game {
     this.storeCurrentDimensionState();
     this.dimension = target;
     this.portalTimer = 0;
+    this.audio.playSfx("portal", { volume: 0.82 });
     this.replaceWorld(
       this.activeWorld.seed,
       this.dimensionModified[target] ?? [],

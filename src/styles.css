@@ -336,6 +336,42 @@ button {
   color: rgba(234, 243, 240, 0.86);
 }
 
+.damage-indicator {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 180ms ease;
+}
+
+.damage-indicator::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 50% 50%, transparent 0 54%, rgba(196, 35, 35, 0.34) 76%, rgba(196, 35, 35, 0.58) 100%);
+}
+
+.damage-indicator.visible {
+  opacity: 1;
+}
+
+.damage-indicator.front::before {
+  clip-path: polygon(0 0, 100% 0, 100% 35%, 0 35%);
+}
+
+.damage-indicator.back::before {
+  clip-path: polygon(0 65%, 100% 65%, 100% 100%, 0 100%);
+}
+
+.damage-indicator.left::before {
+  clip-path: polygon(0 0, 36% 0, 36% 100%, 0 100%);
+}
+
+.damage-indicator.right::before {
+  clip-path: polygon(64% 0, 100% 0, 100% 100%, 64% 100%);
+}
+
 .boss-bar {
   position: absolute;
   top: 18px;
@@ -713,6 +749,19 @@ button {
   background: linear-gradient(180deg, #a9a9a9, #6f6f6f);
   outline: 2px solid #fff5a1;
   outline-offset: 2px;
+}
+
+.menu-button:active,
+.catalog-page-button:active,
+.recipe-fill-button:active,
+.recipe-card:active,
+.catalog-item:active,
+.inventory-slot:active,
+.craft-slot:active,
+.craft-result-slot:active,
+.equipment-slot:active {
+  transform: translateY(1px);
+  filter: brightness(0.92);
 }
 
 .menu-button.primary {
@@ -1988,9 +2037,7 @@ button {
     inset 2px 2px 0 rgba(255, 255, 255, 0.18),
     inset -2px -2px 0 rgba(0, 0, 0, 0.42),
     0 8px 24px rgba(0, 0, 0, 0.36);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: pre-line;
 }
 
 .inventory-tooltip[hidden] {

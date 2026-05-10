@@ -49,6 +49,7 @@ export interface HudCallbacks {
   onCreateWorldMenu: () => void;
   onOptions: (target: "title" | "paused") => void;
   onOptionsBack: (target: "title" | "paused") => void;
+  onUiAction: (action: "click" | "hover") => void;
   onSettingsChange: (settings: Partial<GameSettings>) => void;
   onCreateWorld: (name: string, seed: string) => void;
   onSelectWorld: (id: string) => void;
@@ -113,6 +114,7 @@ export class Hud {
   private readonly questTracker: HTMLDivElement;
   private readonly bossBar: HTMLDivElement;
   private readonly toast: HTMLDivElement;
+  private readonly damageIndicator: HTMLDivElement;
 
   private mode: HudMode = "title";
   private worlds: WorldSummary[] = [];
@@ -185,7 +187,21 @@ export class Hud {
     this.toast = document.createElement("div");
     this.toast.className = "toast";
 
-    this.hudLayer.append(topBar, this.bossBar, this.reticle, mining, this.itemName, statusBars, this.hotbar, this.questTracker, this.toast);
+    this.damageIndicator = document.createElement("div");
+    this.damageIndicator.className = "damage-indicator";
+
+    this.hudLayer.append(
+      topBar,
+      this.bossBar,
+      this.damageIndicator,
+      this.reticle,
+      mining,
+      this.itemName,
+      statusBars,
+      this.hotbar,
+      this.questTracker,
+      this.toast
+    );
 
     this.menuLayer = document.createElement("div");
     this.menuLayer.className = "menu-layer";
@@ -194,6 +210,26 @@ export class Hud {
     this.panelLayer.className = "panel-layer";
 
     this.element.append(this.hudLayer, this.menuLayer, this.panelLayer);
+    this.element.addEventListener(
+      "pointerdown",
+      (event) => {
+        const target = event.target as HTMLElement | null;
+        if (target?.closest("button, input, select")) {
+          this.callbacks.onUiAction("click");
+        }
+      },
+      true
+    );
+    this.element.addEventListener(
+      "mouseover",
+      (event) => {
+        const target = event.target as HTMLElement | null;
+        if (target?.closest("button")) {
+          this.callbacks.onUiAction("hover");
+        }
+      },
+      true
+    );
     parent.append(this.element);
     this.render();
   }
@@ -246,6 +282,13 @@ export class Hud {
     this.toastTimer = window.setTimeout(() => {
       this.toast.classList.remove("visible", "quest-toast");
     }, 3200);
+  }
+
+  showDamageIndicator(direction: "front" | "back" | "left" | "right"): void {
+    this.damageIndicator.className = `damage-indicator visible ${direction}`;
+    window.setTimeout(() => {
+      this.damageIndicator.classList.remove("visible");
+    }, 420);
   }
 
   private render(): void {
@@ -639,7 +682,7 @@ export class Hud {
         return;
       }
 
-      tooltip.textContent = ITEM_DEFINITIONS[stack.item].name;
+      tooltip.textContent = this.stackTooltip(stack);
       tooltip.style.setProperty("--tooltip-x", `${event.clientX}px`);
       tooltip.style.setProperty("--tooltip-y", `${event.clientY}px`);
       tooltip.hidden = false;
@@ -711,7 +754,7 @@ export class Hud {
     result.disabled = !stats.craftingResult;
     result.addEventListener("click", (event) => this.callbacks.onCraftResult((event as MouseEvent).shiftKey));
     if (stats.craftingResult) {
-      result.title = ITEM_DEFINITIONS[stats.craftingResult.item].name;
+      result.title = this.stackTooltip(stats.craftingResult);
       result.append(this.makeItemIcon(stats.craftingResult), this.makeCount(stats.craftingResult.count));
     }
 
@@ -1302,7 +1345,7 @@ export class Hud {
 
     const stack = stats?.inventory.slots[index] ?? null;
     if (stack) {
-      const name = ITEM_DEFINITIONS[stack.item].name;
+      const name = this.stackTooltip(stack);
       button.title = name;
       button.setAttribute("aria-label", name);
       button.append(this.makeItemIcon(stack), this.makeCount(stack.count));
@@ -1355,7 +1398,7 @@ export class Hud {
     });
 
     if (stack) {
-      const name = ITEM_DEFINITIONS[stack.item].name;
+      const name = this.stackTooltip(stack);
       button.title = name;
       button.setAttribute("aria-label", name);
       button.append(this.makeItemIcon(stack), this.makeCount(stack.count));
@@ -1395,7 +1438,7 @@ export class Hud {
     button.dataset.emptyLabel = label;
     button.draggable = Boolean(stack);
     button.setAttribute("aria-label", stack ? ITEM_DEFINITIONS[stack.item].name : label);
-    button.title = stack ? ITEM_DEFINITIONS[stack.item].name : label;
+    button.title = stack ? this.stackTooltip(stack) : label;
     button.addEventListener("dragstart", (event) => {
       if (!stack || !event.dataTransfer) {
         event.preventDefault();
@@ -1448,6 +1491,27 @@ export class Hud {
     label.className = "item-count";
     label.textContent = count > 1 ? String(count) : "";
     return label;
+  }
+
+  private stackTooltip(stack: ItemStack): string {
+    const def = ITEM_DEFINITIONS[stack.item];
+    const lines = [def.name, `수량 ${stack.count}/${def.maxStack}`];
+    if (stack.durability !== undefined) {
+      lines.push(`내구도 ${stack.durability}`);
+    }
+    if (def.combat) {
+      lines.push(`공격력 ${def.combat.damage} · 재사용 ${def.combat.cooldown.toFixed(1)}초`);
+    }
+    if (def.armor) {
+      lines.push(`방어 ${def.armor.points} · 강인함 ${def.armor.toughness}`);
+    }
+    if (def.food) {
+      lines.push(`허기 +${def.food.hunger} · 포만감 +${def.food.saturation}`);
+    }
+    if (def.placeBlock) {
+      lines.push("우클릭으로 설치");
+    }
+    return lines.join("\n");
   }
 
   private stackFromSlotElement(slot: HTMLButtonElement | null): ItemStack | null {

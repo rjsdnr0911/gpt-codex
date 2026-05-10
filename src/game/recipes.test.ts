@@ -1,6 +1,15 @@
 import { describe, expect, it } from "vitest";
 import { addStack, createInventoryState } from "./inventory";
-import { consumeRecipeGrid, canCraft, craft, matchRecipeFromGrid, RECIPES } from "./recipes";
+import type { ItemStack } from "./items";
+import {
+  addRecipeLayoutToGrid,
+  canAddRecipeLayoutToGrid,
+  consumeRecipeGrid,
+  canCraft,
+  craft,
+  matchRecipeFromGrid,
+  RECIPES
+} from "./recipes";
 
 describe("recipes", () => {
   it("crafts planks from one log in a 2x2 inventory grid", () => {
@@ -43,6 +52,29 @@ describe("recipes", () => {
     expect(recipe?.id).toBe("wooden_pickaxe");
     consumeRecipeGrid(grid, recipe!, 3);
     expect(grid.every((slot) => slot === null)).toBe(true);
+  });
+
+  it("stacks repeated recipe-book placement into an existing craft grid", () => {
+    const recipe = RECIPES.find((entry) => entry.id === "wooden_pickaxe");
+    const grid: Array<ItemStack | null> = Array.from({ length: 9 }, () => null);
+
+    expect(recipe).toBeDefined();
+    expect(addRecipeLayoutToGrid(grid, recipe!, 3, 1)).toBe(true);
+    expect(addRecipeLayoutToGrid(grid, recipe!, 3, 2)).toBe(true);
+    expect(matchRecipeFromGrid(grid, 3)?.id).toBe("wooden_pickaxe");
+    expect(grid.filter(Boolean).every((slot) => slot?.count === 3)).toBe(true);
+
+    consumeRecipeGrid(grid, recipe!, 3);
+    expect(grid.filter(Boolean).every((slot) => slot?.count === 2)).toBe(true);
+  });
+
+  it("prevents recipe-book placement past stack limits", () => {
+    const recipe = RECIPES.find((entry) => entry.id === "sticks");
+    const grid: Array<ItemStack | null> = Array.from({ length: 4 }, () => null);
+
+    expect(recipe).toBeDefined();
+    expect(addRecipeLayoutToGrid(grid, recipe!, 2, 64)).toBe(true);
+    expect(canAddRecipeLayoutToGrid(grid, recipe!, 2, 1)).toBe(false);
   });
 
   it("adds portal preparation recipes", () => {

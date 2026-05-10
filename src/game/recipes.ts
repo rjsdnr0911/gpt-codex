@@ -1,5 +1,5 @@
 import { InventoryState, addStack, countItems, removeItems } from "./inventory";
-import { ItemId, ItemStack } from "./items";
+import { ItemId, ItemStack, maxStackFor } from "./items";
 
 export interface Recipe {
   id: string;
@@ -515,6 +515,75 @@ export function recipeLayout(recipe: Recipe, gridSize: 2 | 3): Array<ItemId | nu
   }
 
   return layout;
+}
+
+export function recipeGridMatches(recipe: Recipe, grid: Array<ItemStack | null>, gridSize: 2 | 3): boolean {
+  return matchSpecificRecipeFromGrid(recipe, grid, gridSize);
+}
+
+export function canAddRecipeLayoutToGrid(
+  grid: Array<ItemStack | null>,
+  recipe: Recipe,
+  gridSize: 2 | 3,
+  amount = 1
+): boolean {
+  const layout = recipeLayout(recipe, gridSize);
+  if (!layout || amount <= 0) {
+    return false;
+  }
+
+  for (let index = 0; index < layout.length; index += 1) {
+    const item = layout[index];
+    const stack = grid[index] ?? null;
+    if (!item) {
+      if (stack) {
+        return false;
+      }
+      continue;
+    }
+
+    if (stack && stack.item !== item) {
+      return false;
+    }
+
+    if ((stack?.count ?? 0) + amount > maxStackFor(item)) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+export function addRecipeLayoutToGrid(
+  grid: Array<ItemStack | null>,
+  recipe: Recipe,
+  gridSize: 2 | 3,
+  amount = 1
+): boolean {
+  if (!canAddRecipeLayoutToGrid(grid, recipe, gridSize, amount)) {
+    return false;
+  }
+
+  const layout = recipeLayout(recipe, gridSize);
+  if (!layout) {
+    return false;
+  }
+
+  for (let index = 0; index < layout.length; index += 1) {
+    const item = layout[index];
+    if (!item) {
+      continue;
+    }
+
+    const stack = grid[index];
+    if (stack) {
+      stack.count += amount;
+    } else {
+      grid[index] = { item, count: amount };
+    }
+  }
+
+  return true;
 }
 
 function matchSpecificRecipeFromGrid(recipe: Recipe, grid: Array<ItemStack | null>, gridSize: 2 | 3): boolean {

@@ -60,6 +60,7 @@ interface MobEntity {
   fuse: number;
   eggTimer: number;
   panicTimer: number;
+  hitFlash: number;
   position: THREE.Vector3;
   velocity: THREE.Vector3;
   mesh: THREE.Group;
@@ -390,6 +391,7 @@ export class MobManager {
       const definition = DEFINITIONS[mob.type];
       mob.age += delta;
       mob.attackCooldown = Math.max(0, mob.attackCooldown - delta);
+      mob.hitFlash = Math.max(0, mob.hitFlash - delta);
 
       const toPlayer = playerPosition.clone().sub(mob.position);
       const horizontalDistance = Math.hypot(toPlayer.x, toPlayer.z);
@@ -458,6 +460,7 @@ export class MobManager {
     const mob = this.mobs[bestIndex];
     const definition = DEFINITIONS[mob.type];
     mob.health -= damage;
+    mob.hitFlash = 0.18;
     mob.panicTimer = definition.hostile ? 0 : 4.5;
     mob.velocity.add(direction.clone().multiplyScalar(definition.hostile ? 3.2 : 4.4));
     mob.velocity.y = Math.max(mob.velocity.y, definition.behavior === "spider" ? 4.2 : 3);
@@ -768,6 +771,7 @@ export class MobManager {
       fuse: 0,
       eggTimer: type === "chicken" ? 45 + Math.random() * 80 : 0,
       panicTimer: 0,
+      hitFlash: 0,
       position: new THREE.Vector3(x, y, z),
       velocity: new THREE.Vector3(),
       mesh: this.createMobMesh(definition)
@@ -995,6 +999,22 @@ export class MobManager {
         child.rotation.x = -0.35 - stride * 0.45;
       }
     }
+
+    const flash = mob.hitFlash > 0 ? mob.hitFlash / 0.18 : 0;
+    const baseScale = definition.behavior === "creeper" ? mob.mesh.scale.x : 1;
+    mob.mesh.scale.setScalar(baseScale + flash * 0.045);
+    mob.mesh.traverse((child) => {
+      if (!(child instanceof THREE.Mesh)) {
+        return;
+      }
+      const materials = Array.isArray(child.material) ? child.material : [child.material];
+      for (const material of materials) {
+        if (material instanceof THREE.MeshStandardMaterial) {
+          material.emissive.set(flash > 0 ? "#ff4a4a" : "#000000");
+          material.emissiveIntensity = flash * 0.85;
+        }
+      }
+    });
   }
 
   private createMobMesh(definition: MobDefinition): THREE.Group {
