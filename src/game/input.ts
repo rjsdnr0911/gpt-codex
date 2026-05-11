@@ -7,6 +7,11 @@ export interface MouseLook {
   movementY: number;
 }
 
+export interface MoveAxis {
+  strafe: number;
+  forward: number;
+}
+
 export interface MouseActions {
   primary: boolean;
   primaryHeld: boolean;
@@ -22,6 +27,13 @@ export class InputController {
 
   private movementX = 0;
   private movementY = 0;
+  private touchLookActive = false;
+  private touchLookPointerId: number | null = null;
+  private touchLookX = 0;
+  private touchLookY = 0;
+  private touchMouseBlockUntil = 0;
+  private virtualMove: MoveAxis = { strafe: 0, forward: 0 };
+  private readonly virtualKeys = new Set<string>();
   private primaryQueued = false;
   private secondaryQueued = false;
   private primaryHeld = false;
@@ -38,7 +50,19 @@ export class InputController {
     return document.pointerLockElement === this.element;
   }
 
+  get touchControlsPreferred(): boolean {
+    const compactTouchScreen = navigator.maxTouchPoints > 0 && Math.min(window.innerWidth, window.innerHeight) <= 900;
+    return (
+      compactTouchScreen ||
+      window.matchMedia?.("(pointer: coarse)")?.matches === true ||
+      this.touchLookActive
+    );
+  }
+
   requestPointerLock(): void {
+    if (this.touchControlsPreferred) {
+      return;
+    }
     void this.element.requestPointerLock();
   }
 
@@ -65,7 +89,74 @@ export class InputController {
   }
 
   isDown(code: string): boolean {
-    return this.keys.has(code);
+    return this.keys.has(code) || this.virtualKeys.has(code);
+  }
+
+  moveAxis(): MoveAxis {
+    let strafe = this.virtualMove.strafe;
+    let forward = this.virtualMove.forward;
+
+    if (this.keys.has("KeyW")) {
+      forward += 1;
+    }
+    if (this.keys.has("KeyS")) {
+      forward -= 1;
+    }
+    if (this.keys.has("KeyD")) {
+      strafe += 1;
+    }
+    if (this.keys.has("KeyA")) {
+      strafe -= 1;
+    }
+
+    const length = Math.hypot(strafe, forward);
+    if (length > 1) {
+      strafe /= length;
+      forward /= length;
+    }
+
+    return { strafe, forward };
+  }
+
+  setVirtualMove(strafe: number, forward: number): void {
+    const length = Math.hypot(strafe, forward);
+    if (length > 1) {
+      this.virtualMove = { strafe: strafe / length, forward: forward / length };
+      return;
+    }
+    this.virtualMove = { strafe, forward };
+  }
+
+  setVirtualKey(code: string, pressed: boolean): void {
+    if (pressed) {
+      if (!this.virtualKeys.has(code) && !this.keys.has(code)) {
+        this.pressed.add(code);
+      }
+      this.virtualKeys.add(code);
+      return;
+    }
+
+    this.virtualKeys.delete(code);
+  }
+
+  setVirtualAction(action: "primary" | "secondary", pressed: boolean): void {
+    if (action === "primary") {
+      if (pressed && !this.primaryHeld) {
+        this.primaryQueued = true;
+      }
+      this.primaryHeld = pressed;
+      return;
+    }
+
+    if (pressed && !this.secondaryHeld) {
+      this.secondaryQueued = true;
+    }
+    this.secondaryHeld = pressed;
+  }
+
+  setSelectedSlot(slot: number): void {
+    this.selectedSlot = Math.max(0, Math.min(8, slot));
+    this.onSelectedSlotChange?.(this.selectedSlot);
   }
 
   consumePressed(code: string): boolean {
@@ -80,6 +171,10 @@ export class InputController {
     window.removeEventListener("blur", this.handleBlur);
     document.removeEventListener("pointerlockchange", this.handlePointerLockChange);
     document.removeEventListener("mousemove", this.handleMouseMove);
+    this.element.removeEventListener("pointerdown", this.handlePointerDown);
+    window.removeEventListener("pointermove", this.handlePointerMove);
+    window.removeEventListener("pointerup", this.handlePointerUp);
+    window.removeEventListener("pointercancel", this.handlePointerUp);
     this.element.removeEventListener("mousedown", this.handleMouseDown);
     window.removeEventListener("mouseup", this.handleMouseUp);
     this.element.removeEventListener("wheel", this.handleWheel);
@@ -92,6 +187,10 @@ export class InputController {
     window.addEventListener("blur", this.handleBlur);
     document.addEventListener("pointerlockchange", this.handlePointerLockChange);
     document.addEventListener("mousemove", this.handleMouseMove);
+    this.element.addEventListener("pointerdown", this.handlePointerDown);
+    window.addEventListener("pointermove", this.handlePointerMove, { passive: false });
+    window.addEventListener("pointerup", this.handlePointerUp);
+    window.addEventListener("pointercancel", this.handlePointerUp);
     this.element.addEventListener("mousedown", this.handleMouseDown);
     window.addEventListener("mouseup", this.handleMouseUp);
     this.element.addEventListener("wheel", this.handleWheel, { passive: false });
@@ -138,8 +237,12 @@ export class InputController {
   private readonly handleBlur = (): void => {
     this.keys.clear();
     this.pressed.clear();
+    this.virtualKeys.clear();
+    this.virtualMove = { strafe: 0, forward: 0 };
     this.primaryHeld = false;
     this.secondaryHeld = false;
+    this.touchLookActive = false;
+    this.touchLookPointerId = null;
   };
 
   private readonly handlePointerLockChange = (): void => {
@@ -155,7 +258,50 @@ export class InputController {
     this.movementY += event.movementY;
   };
 
+  private readonly handlePointerDown = (event: PointerEvent): void => {
+    if (event.pointerType === "mouse") {
+      return;
+    }
+
+    this.touchMouseBlockUntil = Date.now() + 700;
+    this.touchLookActive = true;
+    this.touchLookPointerId = event.pointerId;
+    this.touchLookX = event.clientX;
+    this.touchLookY = event.clientY;
+    this.element.setPointerCapture?.(event.pointerId);
+    event.preventDefault();
+  };
+
+  private readonly handlePointerMove = (event: PointerEvent): void => {
+    if (!this.touchLookActive || event.pointerId !== this.touchLookPointerId) {
+      return;
+    }
+
+    const dx = event.clientX - this.touchLookX;
+    const dy = event.clientY - this.touchLookY;
+    this.touchLookX = event.clientX;
+    this.touchLookY = event.clientY;
+    this.movementX += dx * 1.85;
+    this.movementY += dy * 1.85;
+    event.preventDefault();
+  };
+
+  private readonly handlePointerUp = (event: PointerEvent): void => {
+    if (event.pointerId !== this.touchLookPointerId) {
+      return;
+    }
+
+    this.touchLookActive = false;
+    this.touchLookPointerId = null;
+    event.preventDefault();
+  };
+
   private readonly handleMouseDown = (event: MouseEvent): void => {
+    if (Date.now() < this.touchMouseBlockUntil) {
+      event.preventDefault();
+      return;
+    }
+
     if (!this.pointerLocked) {
       this.requestPointerLock();
       return;
@@ -191,11 +337,6 @@ export class InputController {
   private readonly preventContextMenu = (event: MouseEvent): void => {
     event.preventDefault();
   };
-
-  private setSelectedSlot(slot: number): void {
-    this.selectedSlot = slot;
-    this.onSelectedSlotChange?.(slot);
-  }
 
   private shouldCaptureKeyboard(event: KeyboardEvent): boolean {
     if (this.isEditableTarget(event.target)) {

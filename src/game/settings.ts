@@ -2,6 +2,7 @@ export type GraphicsQuality = "quality" | "balanced" | "performance";
 
 export interface GameSettings {
   mouseSensitivity: number;
+  touchSensitivity: number;
   fov: number;
   renderDistance: number;
   graphicsQuality: GraphicsQuality;
@@ -14,6 +15,7 @@ const SETTINGS_KEY = "codex-craft:settings:v1";
 
 export const DEFAULT_SETTINGS: GameSettings = {
   mouseSensitivity: 1,
+  touchSensitivity: 1,
   fov: 74,
   renderDistance: 3,
   graphicsQuality: "balanced",
@@ -43,6 +45,7 @@ export function normalizeGameSettings(settings: Partial<GameSettings> | null | u
   const quality = settings?.graphicsQuality;
   return {
     mouseSensitivity: clampNumber(settings?.mouseSensitivity, 0.25, 2.5, DEFAULT_SETTINGS.mouseSensitivity),
+    touchSensitivity: clampNumber(settings?.touchSensitivity, 0.35, 2.2, DEFAULT_SETTINGS.touchSensitivity),
     fov: clampNumber(settings?.fov, 60, 95, DEFAULT_SETTINGS.fov),
     renderDistance: Math.round(clampNumber(settings?.renderDistance, 2, 5, DEFAULT_SETTINGS.renderDistance)),
     graphicsQuality: quality === "quality" || quality === "balanced" || quality === "performance" ? quality : DEFAULT_SETTINGS.graphicsQuality,

@@ -53,24 +53,11 @@ export class Player {
     const forward = new THREE.Vector3(-Math.sin(this.yaw), 0, -Math.cos(this.yaw));
     const right = new THREE.Vector3(Math.cos(this.yaw), 0, -Math.sin(this.yaw));
     const wish = new THREE.Vector3();
+    const axis = input.moveAxis();
 
-    if (input.isDown("KeyW")) {
-      wish.add(forward);
-    }
-
-    if (input.isDown("KeyS")) {
-      wish.sub(forward);
-    }
-
-    if (input.isDown("KeyD")) {
-      wish.add(right);
-    }
-
-    if (input.isDown("KeyA")) {
-      wish.sub(right);
-    }
-
-    if (wish.lengthSq() > 0) {
+    wish.addScaledVector(forward, axis.forward);
+    wish.addScaledVector(right, axis.strafe);
+    if (wish.lengthSq() > 1) {
       wish.normalize();
     }
 

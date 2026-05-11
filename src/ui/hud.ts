@@ -71,6 +71,12 @@ export interface HudCallbacks {
   onSmeltRecipe: (recipeId: string, smeltAll: boolean) => void;
   onToggleGameMode: () => void;
   onGiveCreativeItem: (item: ItemId) => void;
+  onTouchMove: (strafe: number, forward: number) => void;
+  onTouchKey: (code: string, pressed: boolean) => void;
+  onTouchAction: (action: "primary" | "secondary", pressed: boolean) => void;
+  onSelectHotbarSlot: (slot: number) => void;
+  onMobileInventory: () => void;
+  onMobilePause: () => void;
   onRegenerateWorld: (id: string) => void;
   onResetAll: () => void;
 }
@@ -117,6 +123,8 @@ export class Hud {
   private readonly hungerRow: HTMLDivElement;
   private readonly airRow: HTMLDivElement;
   private readonly hotbar: HTMLDivElement;
+  private readonly mobileControls: HTMLDivElement;
+  private readonly mobileStick: HTMLDivElement;
   private readonly questTracker: HTMLDivElement;
   private readonly bossBar: HTMLDivElement;
   private readonly toast: HTMLDivElement;
@@ -131,6 +139,7 @@ export class Hud {
   private catalogPage = 0;
   private catalogSelectedItem: ItemId | null = null;
   private optionsReturnMode: "title" | "paused" = "title";
+  private mobileStickPointerId: number | null = null;
 
   constructor(parent: HTMLElement, callbacks: HudCallbacks) {
     this.callbacks = callbacks;
@@ -184,6 +193,11 @@ export class Hud {
     this.hotbar = document.createElement("div");
     this.hotbar.className = "hotbar survival-hotbar";
 
+    this.mobileControls = document.createElement("div");
+    this.mobileControls.className = "mobile-controls";
+    this.mobileControls.hidden = true;
+    this.mobileStick = this.makeMobileControls();
+
     this.questTracker = document.createElement("div");
     this.questTracker.className = "quest-tracker";
 
@@ -205,6 +219,7 @@ export class Hud {
       this.itemName,
       statusBars,
       this.hotbar,
+      this.mobileControls,
       this.questTracker,
       this.toast
     );
@@ -238,6 +253,126 @@ export class Hud {
     );
     parent.append(this.element);
     this.render();
+  }
+
+  private makeMobileControls(): HTMLDivElement {
+    const left = document.createElement("div");
+    left.className = "mobile-left-pad";
+
+    const stick = document.createElement("div");
+    stick.className = "mobile-stick";
+    stick.setAttribute("aria-label", "이동 조이스틱");
+    const knob = document.createElement("span");
+    knob.className = "mobile-stick-knob";
+    stick.append(knob);
+    left.append(stick);
+
+    const top = document.createElement("div");
+    top.className = "mobile-top-actions";
+    top.append(
+      this.makeMobileTapButton("일시정지", "pause", () => this.callbacks.onMobilePause()),
+      this.makeMobileTapButton("가방", "bag", () => this.callbacks.onMobileInventory())
+    );
+
+    const right = document.createElement("div");
+    right.className = "mobile-action-pad";
+    right.append(
+      this.makeMobileHoldButton("채굴", "primary", (pressed) => this.callbacks.onTouchAction("primary", pressed)),
+      this.makeMobileHoldButton("사용", "secondary", (pressed) => this.callbacks.onTouchAction("secondary", pressed)),
+      this.makeMobileHoldButton("점프", "jump", (pressed) => this.callbacks.onTouchKey("Space", pressed)),
+      this.makeMobileHoldButton("숙임", "sneak", (pressed) => this.callbacks.onTouchKey("ShiftLeft", pressed)),
+      this.makeMobileHoldButton("질주", "sprint", (pressed) => this.callbacks.onTouchKey("ControlLeft", pressed))
+    );
+
+    stick.addEventListener("pointerdown", (event) => {
+      this.mobileStickPointerId = event.pointerId;
+      stick.setPointerCapture(event.pointerId);
+      this.updateMobileStick(event, stick, knob);
+      event.preventDefault();
+      event.stopPropagation();
+    });
+    stick.addEventListener("pointermove", (event) => {
+      if (event.pointerId !== this.mobileStickPointerId) {
+        return;
+      }
+      this.updateMobileStick(event, stick, knob);
+      event.preventDefault();
+      event.stopPropagation();
+    });
+    const releaseStick = (event: PointerEvent) => {
+      if (event.pointerId !== this.mobileStickPointerId) {
+        return;
+      }
+      this.mobileStickPointerId = null;
+      knob.style.transform = "translate(-50%, -50%)";
+      this.callbacks.onTouchMove(0, 0);
+      event.preventDefault();
+      event.stopPropagation();
+    };
+    stick.addEventListener("pointerup", releaseStick);
+    stick.addEventListener("pointercancel", releaseStick);
+
+    this.mobileControls.append(top, left, right);
+    return stick;
+  }
+
+  private updateMobileStick(event: PointerEvent, stick: HTMLElement, knob: HTMLElement): void {
+    const rect = stick.getBoundingClientRect();
+    const centerX = rect.left + rect.width / 2;
+    const centerY = rect.top + rect.height / 2;
+    const radius = rect.width * 0.36;
+    let dx = event.clientX - centerX;
+    let dy = event.clientY - centerY;
+    const length = Math.hypot(dx, dy);
+
+    if (length > radius) {
+      dx = dx / length * radius;
+      dy = dy / length * radius;
+    }
+
+    knob.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
+    this.callbacks.onTouchMove(dx / radius, -dy / radius);
+  }
+
+  private makeMobileHoldButton(label: string, className: string, onPress: (pressed: boolean) => void): HTMLButtonElement {
+    const button = document.createElement("button");
+    button.className = `mobile-button ${className}`;
+    button.type = "button";
+    button.textContent = label;
+    const press = (event: PointerEvent) => {
+      button.setPointerCapture(event.pointerId);
+      button.classList.add("pressed");
+      onPress(true);
+      event.preventDefault();
+      event.stopPropagation();
+    };
+    const release = (event: PointerEvent) => {
+      button.classList.remove("pressed");
+      onPress(false);
+      event.preventDefault();
+      event.stopPropagation();
+    };
+    button.addEventListener("pointerdown", press);
+    button.addEventListener("pointerup", release);
+    button.addEventListener("pointercancel", release);
+    button.addEventListener("lostpointercapture", () => {
+      button.classList.remove("pressed");
+      onPress(false);
+    });
+    return button;
+  }
+
+  private makeMobileTapButton(label: string, className: string, onTap: () => void): HTMLButtonElement {
+    const button = document.createElement("button");
+    button.className = `mobile-button ${className}`;
+    button.type = "button";
+    button.textContent = label;
+    button.addEventListener("click", (event) => {
+      onTap();
+      event.preventDefault();
+      event.stopPropagation();
+    });
+    return button;
   }
 
   setMode(mode: HudMode): void {
@@ -330,6 +465,7 @@ export class Hud {
     this.renderHotbar();
     this.renderBossBar();
     this.renderQuestTracker();
+    this.mobileControls.hidden = this.mode !== "playing";
   }
 
   private renderBossBar(): void {
@@ -525,6 +661,9 @@ export class Hud {
     form.append(
       this.makeSliderSetting("마우스 감도", `${Math.round(settings.mouseSensitivity * 100)}%`, 0.25, 2.5, 0.05, settings.mouseSensitivity, (value) =>
         this.callbacks.onSettingsChange({ mouseSensitivity: value })
+      ),
+      this.makeSliderSetting("터치 감도", `${Math.round(settings.touchSensitivity * 100)}%`, 0.35, 2.2, 0.05, settings.touchSensitivity, (value) =>
+        this.callbacks.onSettingsChange({ touchSensitivity: value })
       ),
       this.makeSliderSetting("시야각", `${settings.fov}°`, 60, 95, 1, settings.fov, (value) =>
         this.callbacks.onSettingsChange({ fov: Math.round(value) })
@@ -1316,8 +1455,14 @@ export class Hud {
     this.hotbar.innerHTML = "";
     const inventory = this.stats.inventory;
     for (let index = 0; index < 9; index += 1) {
-      const slot = document.createElement("div");
+      const slot = document.createElement("button");
       slot.className = `slot ${index === inventory.selectedHotbarSlot ? "selected" : ""}`;
+      slot.type = "button";
+      slot.setAttribute("aria-label", `핫바 ${index + 1}`);
+      slot.addEventListener("click", (event) => {
+        this.callbacks.onSelectHotbarSlot(index);
+        event.preventDefault();
+      });
 
       const label = document.createElement("span");
       label.className = "slot-index";
@@ -1760,7 +1905,7 @@ export class Hud {
       .map((entry) => `${entry.recipe.id}:${entry.smeltable ? 1 : 0}`)
       .join("|");
     const boss = stats.boss ? `${stats.boss.health}:${stats.boss.crystals}:${stats.boss.phaseKo}` : "-";
-    const settings = `${stats.settings.mouseSensitivity}:${stats.settings.fov}:${stats.settings.renderDistance}:${stats.settings.graphicsQuality}:${stats.settings.showQuestTracker}:${stats.settings.showDebug}:${stats.settings.soundVolume}`;
+    const settings = `${stats.settings.mouseSensitivity}:${stats.settings.touchSensitivity}:${stats.settings.fov}:${stats.settings.renderDistance}:${stats.settings.graphicsQuality}:${stats.settings.showQuestTracker}:${stats.settings.showDebug}:${stats.settings.soundVolume}`;
     const quests = `${stats.dimension}|${stats.questState.activeMainQuestId ?? "-"}|${stats.questState.trackedSideQuestIds.join(",")}|${stats.questState.completed.join(",")}|${Object.entries(stats.questState.progress)
       .map(([key, value]) => `${key}:${value}`)
       .join(",")}`;

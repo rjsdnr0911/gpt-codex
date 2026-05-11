@@ -52,6 +52,7 @@ button {
   height: 100%;
   display: block;
   cursor: crosshair;
+  touch-action: none;
 }
 
 .hud {
@@ -1065,12 +1066,231 @@ button {
 }
 
 .survival-hotbar {
+  pointer-events: auto;
   border-radius: 0;
   border: 3px solid rgba(0, 0, 0, 0.78);
   background: rgba(28, 28, 28, 0.78);
   box-shadow:
     inset 0 0 0 2px rgba(255, 255, 255, 0.08),
     0 14px 40px rgba(0, 0, 0, 0.44);
+}
+
+.mobile-controls {
+  position: absolute;
+  inset: 0;
+  display: none;
+  pointer-events: none;
+  z-index: 5;
+  touch-action: none;
+  user-select: none;
+}
+
+.mobile-controls[hidden] {
+  display: none;
+}
+
+.mobile-left-pad,
+.mobile-action-pad,
+.mobile-top-actions {
+  pointer-events: auto;
+}
+
+.mobile-left-pad {
+  position: absolute;
+  left: max(18px, env(safe-area-inset-left));
+  bottom: max(86px, calc(env(safe-area-inset-bottom) + 86px));
+  width: 136px;
+  height: 136px;
+  display: grid;
+  place-items: center;
+}
+
+.mobile-stick {
+  position: relative;
+  width: 126px;
+  height: 126px;
+  border: 3px solid rgba(6, 8, 8, 0.72);
+  border-radius: 50%;
+  background:
+    radial-gradient(circle, rgba(242, 239, 230, 0.12), rgba(12, 18, 20, 0.42) 62%, rgba(12, 18, 20, 0.64)),
+    repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.06) 0 3px, transparent 3px 7px);
+  box-shadow:
+    inset 2px 2px 0 rgba(255, 255, 255, 0.16),
+    inset -4px -4px 0 rgba(0, 0, 0, 0.32),
+    0 14px 36px rgba(0, 0, 0, 0.34);
+}
+
+.mobile-stick::before,
+.mobile-stick::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  background: rgba(242, 239, 230, 0.18);
+  transform: translate(-50%, -50%);
+}
+
+.mobile-stick::before {
+  width: 74%;
+  height: 2px;
+}
+
+.mobile-stick::after {
+  width: 2px;
+  height: 74%;
+}
+
+.mobile-stick-knob {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 48px;
+  height: 48px;
+  border: 3px solid rgba(6, 8, 8, 0.76);
+  border-radius: 50%;
+  background: linear-gradient(180deg, rgba(237, 239, 224, 0.42), rgba(120, 134, 120, 0.45));
+  transform: translate(-50%, -50%);
+  box-shadow:
+    inset 2px 2px 0 rgba(255, 255, 255, 0.28),
+    inset -3px -3px 0 rgba(0, 0, 0, 0.34);
+}
+
+.mobile-action-pad {
+  position: absolute;
+  right: max(16px, env(safe-area-inset-right));
+  bottom: max(88px, calc(env(safe-area-inset-bottom) + 88px));
+  width: 178px;
+  height: 178px;
+}
+
+.mobile-button {
+  position: absolute;
+  min-width: 56px;
+  min-height: 52px;
+  padding: 0 8px;
+  border: 3px solid rgba(7, 8, 8, 0.78);
+  border-radius: 9px;
+  background: rgba(35, 39, 39, 0.62);
+  color: #f7f3df;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 950;
+  line-height: 1;
+  text-shadow: 2px 2px 0 #000;
+  box-shadow:
+    inset 2px 2px 0 rgba(255, 255, 255, 0.14),
+    inset -3px -3px 0 rgba(0, 0, 0, 0.34),
+    0 12px 28px rgba(0, 0, 0, 0.26);
+}
+
+.mobile-button.pressed,
+.mobile-button:active {
+  transform: translateY(2px);
+  filter: brightness(1.18);
+}
+
+.mobile-button.primary {
+  right: 58px;
+  bottom: 58px;
+  width: 68px;
+  height: 68px;
+  background: rgba(100, 70, 54, 0.72);
+}
+
+.mobile-button.secondary {
+  right: 0;
+  bottom: 12px;
+}
+
+.mobile-button.jump {
+  right: 18px;
+  bottom: 120px;
+}
+
+.mobile-button.sneak {
+  right: 118px;
+  bottom: 8px;
+}
+
+.mobile-button.sprint {
+  right: 116px;
+  bottom: 104px;
+}
+
+.mobile-top-actions {
+  position: absolute;
+  top: max(12px, env(safe-area-inset-top));
+  right: max(12px, env(safe-area-inset-right));
+  display: flex;
+  gap: 8px;
+}
+
+.mobile-top-actions .mobile-button {
+  position: static;
+  min-width: 58px;
+  min-height: 38px;
+  background: rgba(16, 20, 22, 0.62);
+}
+
+@media (hover: none), (pointer: coarse) {
+  .mobile-controls:not([hidden]) {
+    display: block;
+  }
+}
+
+@media (hover: none), (pointer: coarse), (max-width: 760px) {
+  .brand-stack {
+    max-width: calc(100vw - 188px);
+  }
+
+  .status-line {
+    max-width: 100%;
+    white-space: nowrap;
+  }
+
+  .debug-chip {
+    display: none;
+  }
+
+  .quest-tracker {
+    top: max(86px, calc(env(safe-area-inset-top) + 86px));
+    left: max(12px, env(safe-area-inset-left));
+    right: auto;
+    width: min(328px, calc(100vw - 188px));
+    max-height: 104px;
+    overflow: hidden;
+    gap: 5px;
+    padding: 8px;
+  }
+
+  .quest-tracker-line {
+    padding: 6px;
+  }
+
+  .quest-tracker-line:not(.main),
+  .quest-tracker-line em {
+    display: none;
+  }
+
+  .survival-hotbar {
+    bottom: max(18px, env(safe-area-inset-bottom));
+    width: min(540px, calc(100vw - 180px));
+    min-width: 260px;
+    padding: 6px;
+    gap: 4px;
+  }
+
+  .survival-hotbar .slot {
+    min-height: 38px;
+  }
+
+  .selected-item-name {
+    bottom: max(78px, calc(env(safe-area-inset-bottom) + 78px));
+  }
+
+  .survival-bars {
+    bottom: max(76px, calc(env(safe-area-inset-bottom) + 76px));
+  }
 }
 
 .survival-hotbar .slot,
@@ -2193,5 +2413,19 @@ button {
 
   .crafting-area {
     grid-template-columns: minmax(92px, auto) 24px minmax(32px, 42px);
+  }
+}
+
+@media (hover: none), (pointer: coarse), (max-width: 760px) {
+  .survival-bars {
+    width: min(330px, calc(100vw - 182px));
+    bottom: max(84px, calc(env(safe-area-inset-bottom) + 84px));
+  }
+
+  .heart-icon,
+  .armor-icon,
+  .hunger-icon {
+    width: 15px;
+    height: 15px;
   }
 }

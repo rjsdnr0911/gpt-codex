@@ -238,6 +238,12 @@ export class Game {
       onSmeltRecipe: (recipeId, smeltAll) => this.handleSmelt(recipeId, smeltAll),
       onToggleGameMode: () => this.toggleGameMode(),
       onGiveCreativeItem: (item) => this.giveCreativeItem(item),
+      onTouchMove: (strafe, forward) => this.input.setVirtualMove(strafe, forward),
+      onTouchKey: (code, pressed) => this.input.setVirtualKey(code, pressed),
+      onTouchAction: (action, pressed) => this.input.setVirtualAction(action, pressed),
+      onSelectHotbarSlot: (slot) => this.input.setSelectedSlot(slot),
+      onMobileInventory: () => this.openInventoryFromMobile(),
+      onMobilePause: () => this.pauseFromMobile(),
       onRegenerateWorld: (id) => {
         void this.regenerateWorldCopy(id);
       },
@@ -601,7 +607,9 @@ export class Game {
     }
 
     this.setMode("playing");
-    this.input.requestPointerLock();
+    if (!this.input.touchControlsPreferred) {
+      this.input.requestPointerLock();
+    }
   }
 
   private async quitToTitle(): Promise<void> {
@@ -840,8 +848,24 @@ export class Game {
     }
 
     this.setMode("playing");
-    if (lockPointer) {
+    if (lockPointer && !this.input.touchControlsPreferred) {
       this.input.requestPointerLock();
+    }
+  }
+
+  private openInventoryFromMobile(): void {
+    if (this.mode === "playing") {
+      this.openCraftingPanel("inventory");
+    } else if (this.mode === "inventory" || this.mode === "craftingTable" || this.mode === "furnace") {
+      this.closeOpenContainer(false);
+    }
+  }
+
+  private pauseFromMobile(): void {
+    if (this.mode === "playing") {
+      this.setMode("paused");
+    } else if (this.mode === "paused") {
+      this.resumeGame();
     }
   }
 
@@ -857,13 +881,15 @@ export class Game {
 
   private updatePlaying(delta: number): void {
     const look = this.input.consumeLook();
-    this.player.applyLook(look.movementX, look.movementY, this.settings.mouseSensitivity);
+    this.player.applyLook(
+      look.movementX,
+      look.movementY,
+      this.input.touchControlsPreferred ? this.settings.touchSensitivity : this.settings.mouseSensitivity
+    );
 
+    const axis = this.input.moveAxis();
     const moving =
-      this.input.isDown("KeyW") ||
-      this.input.isDown("KeyA") ||
-      this.input.isDown("KeyS") ||
-      this.input.isDown("KeyD");
+      Math.hypot(axis.strafe, axis.forward) > 0.08;
     const wantsSprint =
       this.input.isDown("ControlLeft") || this.input.isDown("ControlRight") || this.input.isDown("KeyR");
     const sneaking = this.input.isDown("ShiftLeft") || this.input.isDown("ShiftRight");
@@ -2670,7 +2696,9 @@ export class Game {
     this.player.velocity.set(0, 0, 0);
     this.survival.respawn();
     this.setMode("playing");
-    this.input.requestPointerLock();
+    if (!this.input.touchControlsPreferred) {
+      this.input.requestPointerLock();
+    }
     this.queueSave();
   }
 
